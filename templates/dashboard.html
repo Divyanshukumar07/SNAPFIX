@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Add data attribute to indicate this route requires auth -->
+<div id="auth-guard" data-requires-auth="true" style="display: none;"></div>
+
+<div class="dashboard-header">
+    <h2>Citizen Dashboard</h2>
+    <p>Manage your complaints and track their status.</p>
+</div>
+
+<div id="verification-banner" class="alert alert-warning" style="display: none;">
+    <strong>Action Required:</strong> Please verify your email address to submit complaints. 
+    <button id="resend-verification-btn" class="btn btn-secondary btn-sm" style="margin-left: 10px;">Resend Verification Email</button>
+</div>
+
+<div class="dashboard-actions">
+    <a href="/complaints/new" class="btn btn-primary" id="new-complaint-btn">Submit New Complaint</a>
+</div>
+
+<div class="card mt-2">
+    <h3>Your Recent Complaints</h3>
+    <div id="complaints-list" class="complaints-list">
+        <p class="text-muted">Loading complaints...</p>
+    </div>
+</div>
+{% endblock %}

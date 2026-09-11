@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div id="auth-guard" data-requires-auth="true" style="display: none;"></div>
+
+<div class="dashboard-header" style="border-bottom: 2px solid var(--primary-color); padding-bottom: 1rem; margin-bottom: 2rem; display: flex; justify-content: space-between; align-items: center;">
+    <div>
+        <h2>Civic Issue Heatmap</h2>
+        <p>Visualizing complaint density and locations.</p>
+    </div>
+    <a href="/admin/dashboard" class="btn btn-secondary">Back to Dashboard</a>
+</div>
+
+<div id="admin-error" class="alert alert-error" style="display: none;"></div>
+
+<!-- Leaflet CSS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+<div class="card" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color); border-radius: var(--radius);">
+    <div id="map" style="height: 600px; width: 100%;"></div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    if (typeof firebase === 'undefined' || !firebase.apps.length) return;
+    const auth = firebase.auth();
+    const errEl = document.getElementById('admin-error');
+    
+    // Initialize map centered at a default location (e.g. New York or India depending on usecase. 
+    // We'll set a global view and fit bounds later)
+    const map = L.map('map').setView([20.5937, 78.9629], 5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    auth.onAuthStateChanged(async (user) => {
+        if (!user) {
+            window.location.href = '/login';
+            return;
+        }
+
+        try {
+            const token = await user.getIdToken();
+            const response = await fetch('/api/admin/complaints', {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+
+            if (!response.ok) throw new Error("Failed to fetch map data");
+
+            const complaints = await response.json();
+            const bounds = [];
+
+            complaints.forEach(c => {
+                if (c.location_lat && c.location_lng) {
+                    bounds.push([c.location_lat, c.location_lng]);
+                    
+                    let color = 'blue';
+                    if (c.is_overdue) color = 'red';
+                    else if (c.status === 'resolved' || c.status === 'closed') color = 'green';
+                    else if (c.priority_score >= 5) color = 'orange';
+
+                    const circle = L.circleMarker([c.location_lat, c.location_lng], {
+                        radius: 8 + (c.support_count || 1), // scale size by support
+                        fillColor: color,
+                        color: "#fff",
+                        weight: 1,
+                        opacity: 1,
+                        fillOpacity: 0.8
+                    }).addTo(map);
+
+                    circle.bindPopup(`
+                        <strong>${c.category}</strong><br>
+                        Status: ${c.status.toUpperCase()}<br>
+                        Priority: ${c.priority_score} | Supporters: ${c.support_count}<br>
+                        <a href="/admin/dashboard" style="color:blue; text-decoration:underline;">View Details</a>
+                    `);
+                }
+            });
+
+            if (bounds.length > 0) {
+                map.fitBounds(bounds, { padding: [50, 50], maxZoom: 15 });
+            }
+
+        } catch(error) {
+            console.error(error);
+            errEl.innerText = error.message;
+            errEl.style.display = 'block';
+        }
+    });
+});
+</script>
+{% endblock %}

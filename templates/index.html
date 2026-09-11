@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="hero">
+    <h1>Report Issues. Track Progress. Improve Your City.</h1>
+    <p>A transparent platform connecting citizens directly with city departments to resolve civic issues faster.</p>
+    
+    <div class="hero-actions">
+        <a href="/complaints/new" class="btn btn-primary btn-large">Report an Issue</a>
+        <a href="/dashboard" class="btn btn-secondary btn-large">Track Complaint</a>
+    </div>
+</div>
+
+<div class="features-grid">
+    <div class="feature-card">
+        <h3>📍 Smart Routing</h3>
+        <p>Your complaint is automatically routed to the correct municipal department based on the issue category.</p>
+    </div>
+    <div class="feature-card">
+        <h3>🔍 Transparent Tracking</h3>
+        <p>See exactly who is working on your complaint and track its status from submission to resolution.</p>
+    </div>
+    <div class="feature-card">
+        <h3>✅ Verified Resolution</h3>
+        <p>Workers must upload photo proof of the completed job, and you confirm if it was actually fixed.</p>
+    </div>
+</div>
+{% endblock %}

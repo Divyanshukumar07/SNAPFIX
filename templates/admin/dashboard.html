@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div id="auth-guard" data-requires-auth="true" style="display: none;"></div>
+
+<div class="dashboard-header" style="border-bottom: 2px solid var(--primary-color); padding-bottom: 1rem; margin-bottom: 2rem;">
+    <h2>Admin Dashboard (Prototype)</h2>
+    <p>Manage and verify citizen complaints.</p>
+</div>
+
+<div id="admin-stats-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+    <div class="card" style="padding: 1.5rem; text-align: center; background: #eff6ff; border: 1px solid #bfdbfe;">
+        <h3 style="margin-bottom: 0.5rem; color: #1e3a8a;">Total Complaints</h3>
+        <p id="stat-total" style="font-size: 2rem; font-weight: bold; color: #2563eb;">-</p>
+    </div>
+    <div class="card" style="padding: 1.5rem; text-align: center; background: #fffbeb; border: 1px solid #fde68a;">
+        <h3 style="margin-bottom: 0.5rem; color: #78350f;">Pending Verification</h3>
+        <p id="stat-pending" style="font-size: 2rem; font-weight: bold; color: #d97706;">-</p>
+    </div>
+    <div class="card" style="padding: 1.5rem; text-align: center; background: #ecfdf5; border: 1px solid #a7f3d0;">
+        <h3 style="margin-bottom: 0.5rem; color: #064e3b;">Resolved</h3>
+        <p id="stat-resolved" style="font-size: 2rem; font-weight: bold; color: #059669;">-</p>
+    </div>
+</div>
+
+<div style="display: flex; gap: 1rem; margin-bottom: 2rem; justify-content: space-between;">
+    <div style="display: flex; gap: 1rem;">
+        <button class="btn btn-primary" onclick="filterComplaints('')">All</button>
+        <button class="btn btn-secondary" onclick="filterComplaints('pending_verification')">Pending Verification</button>
+        <button class="btn btn-secondary" onclick="filterComplaints('verified')">Verified</button>
+    </div>
+    <a href="/admin/heatmap" class="btn btn-primary" style="background: var(--secondary-color);">🗺️ View Civic Map</a>
+</div>
+
+<div id="admin-error" class="alert alert-error" style="display: none;"></div>
+
+<div id="admin-complaints-list">
+    <p class="text-muted">Loading complaints...</p>
+</div>
+
+<!-- Load Admin JS -->
+<script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+{% endblock %}
