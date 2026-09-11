@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div id="auth-guard" data-requires-auth="true" style="display: none;"></div>
+<div id="auth-guard" data-requires-auth="true" data-allowed-roles="service_worker,department_head" style="display: none;"></div>
 
 <div class="dashboard-header" style="border-bottom: 2px solid var(--primary-color); padding-bottom: 1rem; margin-bottom: 2rem;">
     <h2>Service Worker Dashboard</h2>

@@ -50,7 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- GLOBAL AUTH STATE CHANGES ---
-    auth.onAuthStateChanged(user => {
+    auth.onAuthStateChanged(async user => {
         const path = window.location.pathname;
 
         if (user) {
@@ -83,20 +83,70 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
 
-                if (path === '/login' || path === '/register') {
-                    window.location.href = '/dashboard';
-                    return;
-                }
+                // Normal authenticated state - Fetch Role from Backend
+                const token = await user.getIdToken();
+                try {
+                    const res = await fetch('/api/users/me', {
+                        headers: { 'Authorization': 'Bearer ' + token }
+                    });
+                    
+                    let role = 'citizen';
+                    if (res.ok) {
+                        const userData = await res.json();
+                        role = userData.role;
+                    }
 
-                // Normal authenticated state
-                navLinks.innerHTML = `
-                    <span>${user.email} ✅</span>
-                    <a href="/dashboard">Dashboard</a>
-                    <button id="nav-logout" class="btn btn-secondary" style="padding: 0.3rem 0.8rem;">Logout</button>
-                `;
+                    let dashboardPath = '/dashboard';
+                    if (role === 'service_worker') dashboardPath = '/worker/dashboard';
+                    else if (['city_admin', 'main_authority', 'department_head'].includes(role)) dashboardPath = '/admin/dashboard';
 
-                if (path === '/dashboard') {
-                    loadDashboardComplaints(user);
+                    if (path === '/login' || path === '/register') {
+                        window.location.href = dashboardPath;
+                        return;
+                    }
+
+                    // DOM Interception for Unauthorized Access
+                    if (authGuard) {
+                        const allowedRolesStr = authGuard.getAttribute('data-allowed-roles');
+                        if (allowedRolesStr) {
+                            const allowedRoles = allowedRolesStr.split(',').map(r => r.trim());
+                            if (!allowedRoles.includes(role)) {
+                                document.querySelector('main').innerHTML = `
+                                    <div class="card" style="text-align: center; padding: 4rem 2rem; max-width: 500px; margin: 4rem auto;">
+                                        <h2 style="color: var(--danger-color); margin-bottom: 1rem;">🔒 Access Restricted</h2>
+                                        <p style="margin-bottom: 2rem;">You don't have permission to access this area. This section is available only to authorized users.</p>
+                                        <a href="${dashboardPath}" class="btn btn-primary">Return to Dashboard</a>
+                                    </div>
+                                `;
+                                return; // Halt further page execution
+                            }
+                        }
+                    }
+
+                    // Role-Aware Navigation
+                    let navHtml = `<span>${user.email} (${role.toUpperCase()}) ✅</span>`;
+                    
+                    if (role === 'citizen') {
+                        navHtml += `<a href="/dashboard">My Dashboard</a>`;
+                        navHtml += `<a href="/complaints/new">Report Issue</a>`;
+                    } else if (role === 'service_worker') {
+                        navHtml += `<a href="/worker/dashboard">Worker Dashboard</a>`;
+                    } else if (role === 'department_head') {
+                        navHtml += `<a href="/admin/dashboard">Dept Dashboard</a>`;
+                    } else if (['city_admin', 'main_authority'].includes(role)) {
+                        navHtml += `<a href="/admin/dashboard">City Dashboard</a>`;
+                        navHtml += `<a href="/admin/heatmap">Civic Map</a>`;
+                    }
+                    
+                    navHtml += `<button id="nav-logout" class="btn btn-secondary" style="padding: 0.3rem 0.8rem; margin-left: 1rem;">Logout</button>`;
+                    navLinks.innerHTML = navHtml;
+
+                    if (path === '/dashboard' && role === 'citizen') {
+                        loadDashboardComplaints(user);
+                    }
+                    
+                } catch (e) {
+                    console.error("Failed to fetch user role", e);
                 }
             }
 

@@ -1,4 +1,5 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, g
+from functools import wraps
 from datetime import datetime
 from config import Config
 from firebase_admin import auth
@@ -70,33 +71,79 @@ def health_check():
 
 from firebase_admin import auth
 
-def get_current_user_id():
-    """Extracts and verifies Firebase ID token from Authorization header."""
+def get_current_user():
+    """Extracts ID token, verifies, and fetches/creates Firestore profile."""
+    if hasattr(g, 'user'):
+        return g.user
+
     auth_header = request.headers.get('Authorization')
     if not auth_header or not auth_header.startswith('Bearer '):
         # Fallback for prototype testing if no token is provided
-        return "mock-user-1"
+        return {"uid": "mock-user-1", "role": "citizen", "email": "mock@example.com"}
         
     id_token = auth_header.split('Bearer ')[1]
     
-    # If running in dummy mode (no db), we can't verify the token with Google
     if db is None:
-        return "mock-user-1"
+        return {"uid": "mock-user-1", "role": "citizen", "email": "mock@example.com"}
         
     try:
         decoded_token = auth.verify_id_token(id_token)
-        return decoded_token['uid']
+        uid = decoded_token['uid']
+        email = decoded_token.get('email', '')
+        
+        user_ref = db.collection('users').document(uid)
+        user_doc = user_ref.get()
+        
+        if user_doc.exists:
+            g.user = user_doc.to_dict()
+        else:
+            g.user = {
+                "uid": uid,
+                "email": email,
+                "role": "citizen",
+                "department_id": None
+            }
+            user_ref.set(g.user)
+            
+        return g.user
     except Exception as e:
-        # Invalid token
         return None
 
+def get_current_user_id():
+    user = get_current_user()
+    return user['uid'] if user else None
+
+def require_roles(allowed_roles):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            user = get_current_user()
+            if not user:
+                return jsonify({
+                    "error": "unauthorized",
+                    "message": "Authentication required."
+                }), 401
+            if user.get('role') not in allowed_roles:
+                return jsonify({
+                    "error": "forbidden",
+                    "message": "You do not have permission to access this resource."
+                }), 403
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+@api.route('/users/me', methods=['GET'])
+def get_me():
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+    return jsonify(user), 200
+
 @api.route('/complaints', methods=['POST'])
+@require_roles(['citizen', 'service_worker', 'department_head', 'city_admin', 'main_authority'])
 def create_complaint():
     data = request.json
     citizen_id = get_current_user_id()
-    
-    if not citizen_id:
-        return jsonify({"error": "Unauthorized"}), 401
     
     category = data.get('category', 'General')
     
@@ -207,6 +254,7 @@ def support_complaint(complaint_id):
     return jsonify({"message": "Support added successfully", "complaint": c}), 200
 
 @api.route('/complaints', methods=['GET'])
+@require_roles(['main_authority'])
 def list_complaints():
     if db is None:
         return jsonify([]), 200
@@ -234,10 +282,9 @@ def list_complaints():
     return jsonify(complaints), 200
 
 @api.route('/complaints/me', methods=['GET'])
+@require_roles(['citizen', 'service_worker', 'department_head', 'city_admin', 'main_authority'])
 def list_my_complaints():
     user_id = get_current_user_id()
-    if not user_id:
-        return jsonify({"error": "Unauthorized"}), 401
         
     if db is None:
         return jsonify([]), 200
@@ -316,9 +363,10 @@ def update_complaint_status(complaint_id):
     return jsonify(updated_complaint), 200
 
 @api.route('/admin/complaints', methods=['GET'])
+@require_roles(['city_admin', 'main_authority', 'department_head'])
 def admin_list_complaints():
-    user_id = get_current_user_id()
-    if not user_id:
+    user = get_current_user()
+    if not user:
         return jsonify({"error": "Unauthorized"}), 401
         
     if db is None:
@@ -326,8 +374,13 @@ def admin_list_complaints():
         
     status_filter = request.args.get('status')
     
-    # Efficient query without composite index: limit to 100, sort in memory
-    docs = db.collection('complaints').limit(100).stream()
+    query = db.collection('complaints')
+    if user.get('role') == 'department_head':
+        if not user.get('department_id'):
+            return jsonify([]), 200
+        query = query.where('department', '==', user.get('department_id'))
+        
+    docs = query.limit(100).stream()
     
     complaints = []
     now = datetime.utcnow()
@@ -351,6 +404,7 @@ def admin_list_complaints():
     return jsonify(complaints), 200
 
 @api.route('/admin/complaints/<complaint_id>/verify', methods=['POST'])
+@require_roles(['city_admin', 'main_authority'])
 def admin_verify_complaint(complaint_id):
     user_id = get_current_user_id()
     if not user_id:
@@ -381,10 +435,9 @@ def admin_verify_complaint(complaint_id):
     return jsonify({"message": "Verified successfully", "complaint": c}), 200
 
 @api.route('/admin/stats', methods=['GET'])
+@require_roles(['city_admin', 'main_authority'])
 def admin_stats():
     user_id = get_current_user_id()
-    if not user_id:
-        return jsonify({"error": "Unauthorized"}), 401
         
     if db is None:
         return jsonify({"total": 0, "pending": 0, "resolved": 0}), 200
@@ -410,10 +463,9 @@ def admin_stats():
         return jsonify({"error": str(e), "total": 0, "pending": 0, "resolved": 0}), 200
 
 @api.route('/admin/complaints/<complaint_id>/assign', methods=['POST'])
+@require_roles(['city_admin', 'main_authority', 'department_head'])
 def admin_assign_complaint(complaint_id):
-    user_id = get_current_user_id()
-    if not user_id:
-        return jsonify({"error": "Unauthorized"}), 401
+    user = get_current_user()
         
     data = request.json
     worker_id = data.get('worker_id')
@@ -430,6 +482,9 @@ def admin_assign_complaint(complaint_id):
         return jsonify({"error": "Not found"}), 404
         
     c = doc.to_dict()
+    if user.get('role') == 'department_head' and c.get('department') != user.get('department_id'):
+        return jsonify({"error": "Forbidden: Complaint is not in your department"}), 403
+        
     if c.get('status') != 'verified':
         return jsonify({"error": "Complaint must be verified before assignment"}), 400
         
@@ -444,20 +499,15 @@ def admin_assign_complaint(complaint_id):
     return jsonify({"message": "Assigned successfully"}), 200
 
 @api.route('/worker/complaints', methods=['GET'])
+@require_roles(['service_worker'])
 def worker_list_complaints():
-    user_id = get_current_user_id()
-    if not user_id:
-        return jsonify({"error": "Unauthorized"}), 401
-        
-    # In prototype: we assume the user_id (email or UID) matches the worker_id assigned.
-    # We will pass the user's email from the frontend to query.
-    worker_email = request.args.get('email')
+    user = get_current_user()
     
     if db is None:
         return jsonify([]), 200
         
-    # Search by worker_id == user_id OR worker_id == user_email
-    docs = db.collection('complaints').where('worker_id', 'in', [user_id, worker_email]).stream()
+    # Strictly scoped to assigned worker
+    docs = db.collection('complaints').where('worker_id', 'in', [user['uid'], user.get('email')]).stream()
     
     complaints = []
     for doc in docs:
@@ -469,10 +519,9 @@ def worker_list_complaints():
     return jsonify(complaints), 200
 
 @api.route('/worker/complaints/<complaint_id>/proof', methods=['POST'])
+@require_roles(['service_worker'])
 def worker_upload_proof(complaint_id):
-    user_id = get_current_user_id()
-    if not user_id:
-        return jsonify({"error": "Unauthorized"}), 401
+    user = get_current_user()
         
     data = request.json
     proof_url = data.get('proof_url')
@@ -490,6 +539,11 @@ def worker_upload_proof(complaint_id):
         return jsonify({"error": "Not found"}), 404
         
     c = doc.to_dict()
+    
+    # Strict Worker Scoping Check
+    if c.get('worker_id') not in [user['uid'], user.get('email')]:
+        return jsonify({"error": "Forbidden: This task is not assigned to you"}), 403
+        
     if c.get('status') != 'assigned':
         return jsonify({"error": "Complaint must be assigned before providing proof"}), 400
         

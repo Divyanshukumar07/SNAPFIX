@@ -23,7 +23,20 @@ REPORT → VERIFY → ASSIGN → SOLVE → PROVE → CONFIRM → CLOSE
 - Firebase Client SDK (Auth & Storage for the Frontend JS)
 - `python-dotenv` for secrets management
 
-## 5. Features Required by the Original DOCX
+## 5. Security & Authorization (RBAC)
+The application enforces strict server-side Role-Based Access Control (RBAC) stored in the Firestore `users` collection.
+Normal public registration creates only `citizen` roles.
+
+**Hierarchy & Scoping:**
+1. **Main Authority**: City-wide oversight (`/api/admin/*`, `/api/complaints` full view).
+2. **City Admin**: Manages complaints and assignments across departments.
+3. **Department Head**: Scoped to view and assign complaints ONLY within their `department_id`.
+4. **Service Worker**: Scoped to view and resolve complaints ONLY assigned directly to them.
+5. **Citizen**: Can create complaints, view own complaints, and confirm/reject resolutions.
+
+Roles can only be elevated securely via the backend `seed_roles.py` tool.
+
+## 6. Features Required by the Original DOCX
 - OTP-Based Authentication
 - Citizen Complaint Registration & Tracking
 - Complaint Verification (Rule-based)
