@@ -120,7 +120,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to ban user");
             if (window.SnapFixToast) window.SnapFixToast.show("User banned successfully.", "success");
-            loadUsers(currentUser);
+            const userObj = allUsers.find(u => u.uid === uid);
+            if (userObj) userObj.account_status = 'banned';
+            renderUsers();
         } catch(err) {
             if (window.SnapFixToast) window.SnapFixToast.show(err.message, "error");
         }
@@ -147,7 +149,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to unban user");
             if (window.SnapFixToast) window.SnapFixToast.show("User account status restored to Active.", "success");
-            loadUsers(currentUser);
+            const userObj = allUsers.find(u => u.uid === uid);
+            if (userObj) userObj.account_status = 'active';
+            renderUsers();
         } catch(err) {
             if (window.SnapFixToast) window.SnapFixToast.show(err.message, "error");
         }
