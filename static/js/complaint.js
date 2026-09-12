@@ -60,20 +60,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnGetLocation) {
         btnGetLocation.addEventListener('click', () => {
             if (!navigator.geolocation) {
-                if (window.isSecureContext === false) {
-                    locStatus.innerHTML = `Location requires HTTPS. <button type="button" id="btn-mock-loc" class="btn btn-secondary btn-sm" style="margin-left: 10px;">Mock Location (Test)</button>`;
-                    locStatus.style.color = '#d97706'; // warning color
-                    
-                    document.getElementById('btn-mock-loc').addEventListener('click', () => {
-                        latInput.value = 40.7128;
-                        lngInput.value = -74.0060;
-                        locStatus.innerHTML = `Mocked! (40.7128, -74.0060)<br><iframe width="100%" height="200" src="https://www.openstreetmap.org/export/embed.html?bbox=-74.0160,40.7028,-73.9960,40.7228&layer=mapnik&marker=40.7128,-74.0060" style="border: 1px solid #e2e8f0; border-radius: 8px; margin-top: 10px;"></iframe>`;
-                        locStatus.style.color = 'green';
-                    });
-                } else {
-                    locStatus.innerText = "Geolocation is not supported by your browser.";
-                    locStatus.style.color = 'red';
-                }
+                locStatus.innerText = "Geolocation is not supported by your browser.";
+                locStatus.style.color = 'red';
                 return;
             }
             
@@ -107,20 +95,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                     if (window.isSecureContext === false) {
                         msg += " Note: Browsers block location on non-HTTPS networks.";
-                        msg += `<br><button type="button" id="btn-mock-loc-err" class="btn btn-secondary btn-sm" style="margin-top: 10px;">Mock Location (Test)</button>`;
-                        
-                        // Need a small timeout to let innerHTML render before attaching listener
-                        setTimeout(() => {
-                            const btn = document.getElementById('btn-mock-loc-err');
-                            if(btn) {
-                                btn.addEventListener('click', () => {
-                                    latInput.value = 40.7128;
-                                    lngInput.value = -74.0060;
-                                    locStatus.innerHTML = `Mocked! (40.7128, -74.0060)<br><iframe width="100%" height="200" src="https://www.openstreetmap.org/export/embed.html?bbox=-74.0160,40.7028,-73.9960,40.7228&layer=mapnik&marker=40.7128,-74.0060" style="border: 1px solid #e2e8f0; border-radius: 8px; margin-top: 10px;"></iframe>`;
-                                    locStatus.style.color = 'green';
-                                });
-                            }
-                        }, 50);
                     }
                     
                     locStatus.innerHTML = msg;
