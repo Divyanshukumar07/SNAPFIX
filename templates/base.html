@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart City Management</title>
+    <title>SnapFix</title>
     <!-- Use a modern web font -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
@@ -39,18 +39,56 @@
 <body>
     <nav class="navbar">
         <div class="nav-brand">
-            <a href="/">SmartCity</a>
+            <a href="/">SnapFix</a>
         </div>
         <div class="nav-links" id="nav-links">
             <!-- Dynamically populated by auth.js based on auth state -->
             <a href="/public" id="nav-public">Public Wall</a>
-            <a href="/login" id="nav-login">Login</a>
-            <a href="/register" id="nav-register" class="btn btn-primary">Register</a>
+            <div id="nav-app-tabs" style="display: inline-flex; gap: 1rem; align-items: center;"></div>
+            <div id="nav-auth-buttons" style="display: inline-flex; gap: 1rem;">
+                <a href="/login" id="nav-login">Login</a>
+                <a href="/register" id="nav-register" class="btn btn-primary">Register</a>
+            </div>
+            <!-- Profile Menu -->
+            <div id="nav-profile-menu" style="display: none; position: relative; align-items: center; gap: 0.5rem; cursor: pointer;">
+                <div id="nav-worker-status-container" style="display: none;">
+                    <button id="nav-worker-status-btn" class="btn btn-sm" style="background: #e2e8f0; color: #475569; border: none; padding: 0.2rem 0.6rem; border-radius: 99px; font-size: 0.8rem; font-weight: bold;">Status</button>
+                </div>
+                <div id="nav-profile-circle" style="width: 36px; height: 36px; background: var(--primary-color); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.1rem; user-select: none;">
+                    U
+                </div>
+                <!-- Dropdown -->
+                <div id="nav-dropdown" style="display: none; position: absolute; top: 110%; right: 0; background: white; border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); width: 200px; z-index: 9999; flex-direction: column;">
+                    <!-- Populated by auth.js -->
+                </div>
+            </div>
         </div>
     </nav>
 
     <main class="container">
         {% block content %}{% endblock %}
     </main>
+
+    <!-- Global Toast Notifications -->
+    <div id="snapfix-toast-container" style="position: fixed; bottom: 1.5rem; right: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem; z-index: 10000; pointer-events: none;"></div>
+
+    <!-- Global SnapFix Modal -->
+    <div id="snapfix-modal-overlay" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 10000; align-items: center; justify-content: center;">
+        <div id="snapfix-modal-card" class="card" style="width: 90%; max-width: 500px; padding: 1.5rem; position: relative;">
+            <h3 id="snapfix-modal-title" style="margin-bottom: 1rem; color: #1e293b;">Title</h3>
+            <div id="snapfix-modal-body" style="margin-bottom: 1.5rem; font-size: 0.95rem; color: #475569;">
+                <!-- dynamic content -->
+            </div>
+            <div id="snapfix-modal-input-container" style="margin-bottom: 1.5rem; display: none;">
+                <textarea id="snapfix-modal-input" class="form-control" rows="4" placeholder="Enter details..." style="width: 100%; margin: 0;"></textarea>
+            </div>
+            <div style="display: flex; justify-content: flex-end; gap: 1rem;">
+                <button id="snapfix-modal-cancel" class="btn btn-secondary">Cancel</button>
+                <button id="snapfix-modal-confirm" class="btn btn-primary">Confirm</button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="{{ url_for('static', filename='js/snapfix_ui.js') }}"></script>
 </body>
 </html>

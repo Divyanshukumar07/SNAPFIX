@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div id="auth-guard" data-allowed-roles="main_authority, city_admin, department_head" data-page-name="Worker Directory"></div>
+
+<div class="card" style="margin-bottom: 2rem;">
+    <h2>Worker Directory</h2>
+    <p class="text-muted">View worker availability, current workload, and performance.</p>
+</div>
+
+<div class="card" style="margin-bottom: 2rem; padding: 1.5rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+    <div style="flex: 1; min-width: 200px;">
+        <label for="worker-search" style="font-size: 0.9rem; font-weight: bold; margin-bottom: 0.5rem; display: block;">Search Name/Email</label>
+        <input type="text" id="worker-search" class="form-control" placeholder="Search workers...">
+    </div>
+    
+    <div style="flex: 1; min-width: 200px;">
+        <label for="dept-filter" style="font-size: 0.9rem; font-weight: bold; margin-bottom: 0.5rem; display: block;">Department</label>
+        <select id="dept-filter" class="form-control">
+            <option value="">All Departments</option>
+            <option value="Waste Management">Waste Management</option>
+            <option value="Electrical Department">Electrical Department</option>
+            <option value="Public Works">Public Works</option>
+            <option value="Water Department">Water Department</option>
+            <option value="General Services">General Services</option>
+        </select>
+    </div>
+    
+    <div style="flex: 1; min-width: 150px;">
+        <label for="status-filter" style="font-size: 0.9rem; font-weight: bold; margin-bottom: 0.5rem; display: block;">Status</label>
+        <select id="status-filter" class="form-control">
+            <option value="">All Statuses</option>
+            <option value="active">Active</option>
+            <option value="working">Working</option>
+            <option value="offline">Offline</option>
+        </select>
+    </div>
+</div>
+
+<div id="workers-error" class="alert alert-error" style="display: none; margin-bottom: 1rem;"></div>
+
+<div style="overflow-x: auto;">
+    <table style="width: 100%; border-collapse: collapse; min-width: 800px; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-radius: var(--radius); overflow: hidden;">
+        <thead>
+            <tr style="background: var(--bg-light); border-bottom: 2px solid var(--border-color); text-align: left;">
+                <th style="padding: 1rem;">Worker</th>
+                <th style="padding: 1rem;">Department</th>
+                <th style="padding: 1rem;">Status</th>
+                <th style="padding: 1rem;">Active Tasks</th>
+                <th style="padding: 1rem;">Performance</th>
+                <th style="padding: 1rem;">Actions</th>
+            </tr>
+        </thead>
+        <tbody id="workers-tbody">
+            <tr>
+                <td colspan="6" style="padding: 2rem; text-align: center; color: var(--text-muted);">
+                    Loading workers...
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- Scripts -->
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+<script src="{{ url_for('static', filename='js/firebase-init.js') }}"></script>
+<script src="{{ url_for('static', filename='js/auth.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin_workers.js') }}"></script>
+{% endblock %}

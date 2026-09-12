@@ -282,8 +282,8 @@ async function supportCurrentComplaint() {
     if (!currentComplaintId) return;
     const user = firebase.auth().currentUser;
     if (!user) {
-        alert("Please log in to support complaints.");
-        window.location.href = '/login?next=/public';
+        if (window.SnapFixToast) window.SnapFixToast.show("Please log in to support complaints.", "warning");
+        setTimeout(() => { window.location.href = '/login?next=/public'; }, 1500);
         return;
     }
     
@@ -326,7 +326,7 @@ async function supportCurrentComplaint() {
         }
         
     } catch(err) {
-        alert(err.message);
+        if (window.SnapFixToast) window.SnapFixToast.show(err.message, "error");
         // Reset visually on error
         const c = allComplaints.find(x => x.id === currentComplaintId);
         if (c && c.supporters && c.supporters.includes(user.uid)) {

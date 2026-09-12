@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const fileInput = document.getElementById(`proof-file-${complaintId}`);
         const file = fileInput.files[0];
         if (!file) {
-            alert("Please select a photo of the completed work.");
+            if (window.SnapFixToast) window.SnapFixToast.show("Please select a photo of the completed work.", "warning");
             return;
         }
 
@@ -62,10 +62,10 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (!res.ok) throw new Error(data.error || "Failed to submit proof");
             
-            alert("Proof uploaded successfully! Complaint is now awaiting citizen confirmation.");
+            if (window.SnapFixToast) window.SnapFixToast.show("Proof uploaded successfully! Complaint is now awaiting citizen confirmation.", "success");
             loadWorkerComplaints(user);
         } catch(err) {
-            alert(err.message);
+            if (window.SnapFixToast) window.SnapFixToast.show(err.message, "error");
             const btn = document.getElementById(`btn-proof-${complaintId}`);
             if (btn) {
                 btn.disabled = false;
@@ -75,14 +75,23 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     window.markFalseReport = async function(complaintId) {
-        const reason = prompt("Enter reason for marking as False Report (e.g. 'Issue not found'):");
-        if (!reason || reason.trim() === '') {
-            return;
-        }
-
-        if (!confirm("Are you sure you want to mark this as a False Report? This will be recorded against the citizen.")) {
-            return;
-        }
+        if (!window.SnapFixModal) return;
+        
+        const confirmed = await window.SnapFixModal.confirm(
+            "Mark as False Report",
+            "Are you sure you want to mark this as a False Report? This will be recorded against the citizen.",
+            "Yes, Mark False",
+            true
+        );
+        if (!confirmed) return;
+        
+        const reason = await window.SnapFixModal.prompt(
+            "False Report Reason",
+            "Enter reason for marking as False Report (e.g. 'Issue not found'):",
+            "Enter reason..."
+        );
+        
+        if (!reason || reason.trim() === '') return;
 
         const user = auth.currentUser;
         if (!user) return;
@@ -101,10 +110,10 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (!res.ok) throw new Error(data.error || "Failed to mark false report");
             
-            alert("Complaint marked as False Report successfully.");
+            if (window.SnapFixToast) window.SnapFixToast.show("Complaint marked as False Report successfully.", "success");
             loadWorkerComplaints(user);
         } catch(err) {
-            alert(err.message);
+            if (window.SnapFixToast) window.SnapFixToast.show(err.message, "error");
         }
     };
 
@@ -137,7 +146,20 @@ document.addEventListener('DOMContentLoaded', () => {
             let html = '<div style="display: flex; flex-direction: column; gap: 1rem;">';
             complaints.forEach(c => {
                 let actionHtml = '';
-                if (c.status === 'assigned') {
+                if (c.status === 'completed') {
+                    actionHtml = `<div style="margin-top:1rem;"><span style="color: green; font-weight: bold;">Work Completed ✓</span></div>`;
+                } else if (c.assignment_state === 'pending') {
+                    actionHtml = `
+                        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed #ccc; background: #fffbeb; padding: 1rem; border-radius: 8px;">
+                            <label style="display:block; margin-bottom: 0.5rem; font-weight:bold; color: #b45309;">New Assignment Pending</label>
+                            <p style="font-size: 0.9rem; margin-bottom: 1rem; color: #78350f;">You have been assigned this complaint. Do you accept?</p>
+                            <div style="display: flex; gap: 1rem;">
+                                <button class="btn btn-primary btn-sm" onclick="acceptAssignment('${c.id}')">Accept Assignment</button>
+                                <button class="btn btn-danger btn-sm" onclick="rejectAssignment('${c.id}')">Reject</button>
+                            </div>
+                        </div>
+                    `;
+                } else if (c.status === 'assigned' && c.assignment_state === 'accepted') {
                     actionHtml = `
                         <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed #ccc;">
                             <label style="display:block; margin-bottom: 0.5rem; font-weight:bold;">Upload Proof of Completion</label>
@@ -148,10 +170,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             </div>
                         </div>
                     `;
-                } else if (c.status === 'completed') {
-                    actionHtml = `<div style="margin-top:1rem;"><span style="color: green; font-weight: bold;">Work Completed ✓</span></div>`;
                 } else {
-                    actionHtml = `<div style="margin-top:1rem;"><span style="color: #666; font-weight: bold;">Status: ${c.status}</span></div>`;
+                    actionHtml = `<div style="margin-top:1rem;"><span style="color: #666; font-weight: bold;">Status: ${c.status.toUpperCase()} (${c.assignment_state || 'assigned'})</span></div>`;
                 }
                 
                 if (c.proof_image_url) {
@@ -183,3 +203,60 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 });
+
+async function acceptAssignment(complaintId) {
+    if (!auth.currentUser) return;
+    try {
+        const token = await auth.currentUser.getIdToken();
+        const res = await fetch(`/api/worker/complaints/${complaintId}/assignment`, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ action: 'accept' })
+        });
+        
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to accept assignment');
+        
+        if (window.SnapFixToast) window.SnapFixToast.show("Assignment accepted!", "success");
+        setTimeout(() => location.reload(), 1000);
+    } catch (error) {
+        if (window.SnapFixToast) window.SnapFixToast.show(error.message, "error");
+    }
+}
+
+async function rejectAssignment(complaintId) {
+    if (!auth.currentUser) return;
+    try {
+        const reason = await window.SnapFixModal.prompt(
+            "Reject Assignment",
+            "Please provide a reason for rejecting this assignment:"
+        );
+        
+        if (reason === null) return; // cancelled
+        if (!reason.trim()) {
+            if (window.SnapFixToast) window.SnapFixToast.show("Reason is required.", "error");
+            return;
+        }
+
+        const token = await auth.currentUser.getIdToken();
+        const res = await fetch(`/api/worker/complaints/${complaintId}/assignment`, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ action: 'reject', reason: reason.trim() })
+        });
+        
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to reject assignment');
+        
+        if (window.SnapFixToast) window.SnapFixToast.show("Assignment rejected.", "success");
+        setTimeout(() => location.reload(), 1000);
+    } catch (error) {
+        if (window.SnapFixToast) window.SnapFixToast.show(error.message, "error");
+    }
+}

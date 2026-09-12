@@ -141,30 +141,75 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
 
                     // Role-Aware Navigation
-                    let navHtml = `<span>${user.email} (${role.toUpperCase()}) ✅</span>`;
+                    const navAppTabs = document.getElementById('nav-app-tabs');
+                    const navProfileMenu = document.getElementById('nav-profile-menu');
+                    const navProfileCircle = document.getElementById('nav-profile-circle');
+                    const navDropdown = document.getElementById('nav-dropdown');
+                    const navAuthBtns = document.getElementById('nav-auth-buttons');
+                    const navWorkerStatus = document.getElementById('nav-worker-status-container');
+                    const navPublic = document.getElementById('nav-public');
                     
-                    if (role === 'citizen') {
-                        navHtml += `<a href="/dashboard">Dashboard</a>`;
-                        navHtml += `<a href="/complaints/new">Report Complaint</a>`;
-                    } else if (role === 'service_worker') {
-                        navHtml += `<a href="/worker/dashboard">Worker Dashboard</a>`;
-                        navHtml += `<a href="/dashboard">My Complaints</a>`;
-                        navHtml += `<a href="/complaints/new">Report Complaint</a>`;
-                    } else if (role === 'department_head') {
-                        navHtml += `<a href="/admin/dashboard">Dept Dashboard</a>`;
-                        navHtml += `<a href="/dashboard">My Complaints</a>`;
-                        navHtml += `<a href="/complaints/new">Report Complaint</a>`;
-                    } else if (['city_admin', 'main_authority'].includes(role)) {
-                        navHtml += `<a href="/admin/dashboard">City Dashboard</a>`;
-                        navHtml += `<a href="/admin/heatmap">Civic Map</a>`;
-                        navHtml += `<a href="/admin/users">User Management</a>`;
-                        navHtml += `<a href="/dashboard">My Complaints</a>`;
-                        navHtml += `<a href="/complaints/new">Report Complaint</a>`;
+                    if (navAuthBtns) navAuthBtns.style.display = 'none';
+                    if (navProfileMenu) navProfileMenu.style.display = 'flex';
+                    if (navProfileCircle) {
+                        navProfileCircle.innerText = (user.displayName || user.email || 'U').charAt(0).toUpperCase();
                     }
-                    
-                    navHtml += `<a href="/public">Public Wall</a>`;
-                    navHtml += `<button id="nav-logout" class="btn btn-secondary" style="padding: 0.3rem 0.8rem; margin-left: 1rem;">Logout</button>`;
-                    navLinks.innerHTML = navHtml;
+
+                    let tabsHtml = '';
+                    if (role === 'citizen') {
+                        tabsHtml += `<a href="/dashboard">Dashboard</a>`;
+                        tabsHtml += `<a href="/complaints/new">Report Complaint</a>`;
+                    } else if (role === 'service_worker') {
+                        tabsHtml += `<a href="/worker/dashboard">Worker Dashboard</a>`;
+                        tabsHtml += `<a href="/dashboard">My Complaints</a>`;
+                        tabsHtml += `<a href="/complaints/new">Report Complaint</a>`;
+                        if (navWorkerStatus) navWorkerStatus.style.display = 'block';
+                    } else if (role === 'department_head') {
+                        tabsHtml += `<a href="/admin/dashboard">Dept Dashboard</a>`;
+                        tabsHtml += `<a href="/dashboard">My Complaints</a>`;
+                        tabsHtml += `<a href="/complaints/new">Report Complaint</a>`;
+                    } else if (['city_admin', 'main_authority'].includes(role)) {
+                        tabsHtml += `<a href="/admin/dashboard">City Dashboard</a>`;
+                        tabsHtml += `<a href="/admin/heatmap">Civic Map</a>`;
+                        tabsHtml += `<a href="/admin/users">User Management</a>`;
+                        tabsHtml += `<a href="/dashboard">My Complaints</a>`;
+                        tabsHtml += `<a href="/complaints/new">Report Complaint</a>`;
+                    }
+                    if (navAppTabs) navAppTabs.innerHTML = tabsHtml;
+
+                    let dropHtml = `
+                        <div style="padding: 1rem; border-bottom: 1px solid var(--border-color); display:flex; flex-direction:column; align-items:center;">
+                            <div style="width: 48px; height: 48px; background: var(--primary-color); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.5rem; user-select: none; margin-bottom: 0.5rem;">
+                                ${(user.displayName || user.email || 'U').charAt(0).toUpperCase()}
+                            </div>
+                            <strong style="margin-bottom:0.2rem;">${user.displayName || 'SnapFix User'}</strong>
+                            <small class="text-muted" style="margin-bottom:0.2rem;">${user.email}</small>
+                            <span class="badge" style="background:#e2e8f0; color:#475569; font-size:0.75rem; padding:2px 6px; border-radius:4px;">${role.toUpperCase()}</span>
+                        </div>
+                        <a href="#" id="nav-logout" style="padding: 0.75rem 1rem; text-decoration: none; color: var(--text-color); display: block; text-align: center; font-weight: bold; color: var(--danger-color);">Logout</a>
+                    `;
+                    if (navDropdown) {
+                        navDropdown.innerHTML = dropHtml;
+                        navProfileMenu.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            navDropdown.style.display = navDropdown.style.display === 'flex' ? 'none' : 'flex';
+                        });
+                        document.addEventListener('click', (e) => {
+                            if (!navProfileMenu.contains(e.target)) {
+                                navDropdown.style.display = 'none';
+                            }
+                        });
+                        
+                        const logoutBtn = document.getElementById('nav-logout');
+                        if (logoutBtn) {
+                            logoutBtn.addEventListener('click', (e) => {
+                                e.preventDefault();
+                                auth.signOut().then(() => {
+                                    window.location.href = '/login';
+                                });
+                            });
+                        }
+                    }
 
                     if (path === '/dashboard' && role === 'citizen') {
                         loadDashboardComplaints(user);
@@ -172,16 +217,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     
                 } catch (e) {
                     console.error("Failed to fetch user role", e);
+                } finally {
+                    const mainContent = document.querySelector('main') || document.querySelector('.container');
+                    if (mainContent) {
+                        mainContent.style.visibility = 'visible';
+                        mainContent.style.opacity = '1';
+                    }
                 }
-            }
-
-            const logoutBtn = document.getElementById('nav-logout');
-            if (logoutBtn) {
-                logoutBtn.addEventListener('click', () => {
-                    auth.signOut().then(() => {
-                        window.location.href = '/login';
-                    });
-                });
             }
 
         } else {
@@ -596,4 +638,39 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
         }
     }
+
+
+    const forgotPasswordLink = document.getElementById('forgot-password-link');
+    if (forgotPasswordLink) {
+        forgotPasswordLink.addEventListener('click', async (e) => {
+            e.preventDefault();
+            let currentEmail = document.getElementById('email')?.value || '';
+            
+            try {
+                const email = await window.SnapFixModal.prompt(
+                    "Reset Password",
+                    "Enter your email address to receive a password reset link:",
+                    currentEmail
+                );
+                
+                if (!email) return; // cancelled or empty
+                
+                await auth.sendPasswordResetEmail(email.trim());
+                if (window.SnapFixToast) {
+                    window.SnapFixToast.show("Password reset email sent. Please check your inbox.", "success");
+                } else {
+                    showSuccess('login-error', "Password reset email sent. Please check your inbox.");
+                    const loginErrEl = document.getElementById('login-error');
+                    if (loginErrEl) loginErrEl.className = 'alert alert-success';
+                }
+            } catch (error) {
+                if (window.SnapFixToast) {
+                    window.SnapFixToast.show(error.message, "error");
+                } else {
+                    showError('login-error', error.message);
+                }
+            }
+        });
+    }
+
 });

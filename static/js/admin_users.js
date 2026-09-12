@@ -100,7 +100,15 @@ document.addEventListener('DOMContentLoaded', () => {
     filterSelect.addEventListener('change', renderUsers);
 
     window.banUser = async function(uid) {
-        if (!confirm("Are you sure you want to ban this user? They will not be able to create new complaints.")) return;
+        if (!window.SnapFixModal) return;
+        const confirmed = await window.SnapFixModal.confirm(
+            "Ban User",
+            "Are you sure you want to ban this user? They will not be able to create new complaints.",
+            "Ban User",
+            true
+        );
+        if (!confirmed) return;
+        
         const currentUser = auth.currentUser;
         if (!currentUser) return;
         try {
@@ -111,15 +119,23 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to ban user");
-            alert("User banned successfully.");
+            if (window.SnapFixToast) window.SnapFixToast.show("User banned successfully.", "success");
             loadUsers(currentUser);
         } catch(err) {
-            alert(err.message);
+            if (window.SnapFixToast) window.SnapFixToast.show(err.message, "error");
         }
     };
 
     window.unbanUser = async function(uid) {
-        if (!confirm("Are you sure you want to restore this user's account?")) return;
+        if (!window.SnapFixModal) return;
+        const confirmed = await window.SnapFixModal.confirm(
+            "Restore User",
+            "Are you sure you want to restore this user's account?",
+            "Restore",
+            false
+        );
+        if (!confirmed) return;
+        
         const currentUser = auth.currentUser;
         if (!currentUser) return;
         try {
@@ -130,10 +146,10 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to unban user");
-            alert("User account status restored to Active.");
+            if (window.SnapFixToast) window.SnapFixToast.show("User account status restored to Active.", "success");
             loadUsers(currentUser);
         } catch(err) {
-            alert(err.message);
+            if (window.SnapFixToast) window.SnapFixToast.show(err.message, "error");
         }
     };
 
@@ -195,11 +211,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || data.message || "Failed to update role");
             
-            alert("User role updated successfully!");
+            if (window.SnapFixToast) window.SnapFixToast.show("User role updated successfully!", "success");
             closeRoleModal();
             loadUsers(currentUser);
         } catch (err) {
-            alert(err.message);
+            if (window.SnapFixToast) window.SnapFixToast.show(err.message, "error");
         }
     });
     

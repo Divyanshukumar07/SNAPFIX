@@ -54,81 +54,71 @@ def add_complaint_history(event_type, user_dict, prev_status, new_status, detail
 
 def calculate_priority(category, support_count, created_at_iso, has_evidence=False, reopen_count=0):
     """
-    Priority Score out of 100 max:
-    - Base Severity: up to 25
-    - Support: up to 30 (cap at 30 supporters)
-    - Age: up to 20 (cap at 20 days)
-    - Evidence: +10 if proof exists
-    - Reopened: +10 per reopen (cap at 20)
+    Priority Score = Seriousness + Days Passed + Supporters
+    - Seriousness (1-5) based on category
+    - Days Passed (+1 per day since creation)
+    - Supporters (+1 per supporter)
+    No caps, no evidence points, no reopen points.
     """
     severity_map = {
-        "Garbage/Waste": 10,
-        "Streetlight/Electrical": 15,
-        "Roads & Potholes": 20,
-        "Roads": 20,
-        "Water/Sewage": 25,
-        "Other Civic Issue": 5,
-        "Other": 5
+        "Water/Sewage": 5,
+        "Roads & Potholes": 4,
+        "Roads": 4,
+        "Streetlight/Electrical": 3,
+        "Garbage/Waste": 2,
+        "Other Civic Issue": 1,
+        "Other": 1
     }
-    base_severity = severity_map.get(category, 5)
+    seriousness = severity_map.get(category, 1)
     
     try:
         created_date = datetime.fromisoformat(created_at_iso)
         age_days = (datetime.utcnow() - created_date).days
-        age_score = min(max(0, age_days), 20)
+        days_passed = max(0, age_days)
     except:
-        age_score = 0
+        days_passed = 0
         
-    support_score = min(support_count, 30)
-    evidence_score = 10 if has_evidence else 0
-    reopen_score = min(reopen_count * 10, 20)
+    supporters_score = max(0, support_count)
     
-    total_score = base_severity + age_score + support_score + evidence_score + reopen_score
-    return min(max(total_score, 1), 100)
+    total_score = seriousness + days_passed + supporters_score
+    return total_score
 
 def get_priority_breakdown(c):
     """
     Returns a dictionary breakdown of how the priority score was calculated
-    based strictly on the existing calculate_priority logic.
+    based strictly on the new 3-factor dynamic priority logic.
     """
     category = c.get('category', 'General')
     support_count = c.get('support_count', 1)
     created_at_iso = c.get('created_at', datetime.utcnow().isoformat())
-    has_evidence = bool(c.get('image_url'))
-    reopen_count = c.get('reopen_count', 0)
     
     severity_map = {
-        "Garbage/Waste": 10,
-        "Streetlight/Electrical": 15,
-        "Roads & Potholes": 20,
-        "Roads": 20,
-        "Water/Sewage": 25,
-        "Other Civic Issue": 5,
-        "Other": 5
+        "Water/Sewage": 5,
+        "Roads & Potholes": 4,
+        "Roads": 4,
+        "Streetlight/Electrical": 3,
+        "Garbage/Waste": 2,
+        "Other Civic Issue": 1,
+        "Other": 1
     }
-    base_severity = severity_map.get(category, 5)
+    seriousness = severity_map.get(category, 1)
     
     try:
         created_date = datetime.fromisoformat(created_at_iso)
         age_days = (datetime.utcnow() - created_date).days
-        age_score = min(max(0, age_days), 20)
+        days_passed = max(0, age_days)
     except:
-        age_score = 0
+        days_passed = 0
         
-    support_score = min(support_count, 30)
-    evidence_score = 10 if has_evidence else 0
-    reopen_score = min(reopen_count * 10, 20)
+    supporters_score = max(0, support_count)
     
-    total_score = base_severity + age_score + support_score + evidence_score + reopen_score
-    final_score = min(max(total_score, 1), 100)
+    total_score = seriousness + days_passed + supporters_score
     
     return {
-        "severity": base_severity,
-        "evidence": evidence_score,
-        "support": support_score,
-        "age": age_score,
-        "reopens": reopen_score,
-        "total": final_score
+        "seriousness": seriousness,
+        "days_passed": days_passed,
+        "supporters": supporters_score,
+        "total": total_score
     }
 
 def get_department_for_category(category):
@@ -881,18 +871,83 @@ def admin_assign_complaint(complaint_id):
         return jsonify({"error": "Complaint must be verified or reopened before assignment"}), 400
         
     action = 'REASSIGNED' if c.get('worker_id') else 'ASSIGNED'
-    event = add_complaint_history(action, user, c.get('status'), 'assigned', f"Assigned to {worker_id}", worker_uid=worker_id)
-        
+    
     doc_ref.update({
         'status': 'assigned',
         'worker_id': worker_id,
+        'assignment_state': 'pending',
+        'pre_assignment_status': c.get('status'),
         'assigned_at': datetime.utcnow().isoformat(),
-        'assigned_by': user.get('uid'),
+        'assigned_by': user.get('uid')
+    })
+    
+    event = add_complaint_history('ASSIGNMENT PENDING', user, c.get('status'), 'assigned', f"Assignment pending for {worker_id}", worker_uid=worker_id)
+    doc_ref.update({
         'history': firestore.ArrayUnion([event])
     })
     
     return jsonify({"message": "Complaint assigned successfully"}), 200
 
+@api.route('/worker/status', methods=['PATCH'])
+@require_roles(['service_worker'])
+def update_worker_status():
+    user = get_current_user()
+    data = request.json
+    new_status = data.get('status')
+    if new_status not in ['active', 'working', 'offline']:
+        return jsonify({"error": "Invalid status"}), 400
+        
+    if db:
+        db.collection('users').document(user['uid']).update({
+            'worker_status': new_status
+        })
+    return jsonify({"message": "Status updated successfully", "status": new_status}), 200
+
+@api.route('/worker/complaints/<complaint_id>/assignment', methods=['PATCH'])
+@require_roles(['service_worker'])
+def handle_assignment(complaint_id):
+    user = get_current_user()
+    data = request.json
+    action = data.get('action') # 'accept' or 'reject'
+    reason = data.get('reason', '')
+    
+    if action not in ['accept', 'reject']:
+        return jsonify({"error": "Invalid action"}), 400
+        
+    if action == 'reject' and not reason.strip():
+        return jsonify({"error": "Rejection reason is required"}), 400
+        
+    if db is None:
+        return jsonify({"error": "Firestore not configured"}), 500
+        
+    doc_ref = db.collection('complaints').document(complaint_id)
+    doc = doc_ref.get()
+    
+    if not doc.exists:
+        return jsonify({"error": "Complaint not found"}), 404
+        
+    c = doc.to_dict()
+    if c.get('worker_id') != user['uid'] or c.get('assignment_state') != 'pending':
+        return jsonify({"error": "Not a pending assignment for this worker"}), 400
+        
+    if action == 'accept':
+        event = add_complaint_history('ASSIGNMENT_ACCEPTED', user, 'assigned', 'assigned', f"Assignment accepted by {user.get('email')}", worker_uid=user['uid'])
+        doc_ref.update({
+            'assignment_state': 'accepted',
+            'history': firestore.ArrayUnion([event])
+        })
+        return jsonify({"message": "Assignment accepted"}), 200
+    else:
+        # Reject
+        prev_status = c.get('pre_assignment_status', 'verified')
+        event = add_complaint_history('ASSIGNMENT_REJECTED', user, 'assigned', prev_status, f"Reason: {reason}", worker_uid=user['uid'])
+        doc_ref.update({
+            'worker_id': None,
+            'assignment_state': 'rejected',
+            'status': prev_status,
+            'history': firestore.ArrayUnion([event])
+        })
+        return jsonify({"message": "Assignment rejected"}), 200
 @api.route('/worker/complaints', methods=['GET'])
 @require_roles(['service_worker'])
 def worker_list_complaints():

@@ -159,7 +159,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             setTimeout(() => { window.location.href = '/dashboard'; }, 3000);
         } catch(err) {
-            alert(err.message);
+            if (window.SnapFixToast) window.SnapFixToast.show(err.message, "error");
         }
     };
 

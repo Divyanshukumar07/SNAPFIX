@@ -45,15 +45,20 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (!res.ok) throw new Error(data.error || "Failed to verify complaint");
             
-            alert("Complaint verified successfully!");
+            if (window.SnapFixToast) window.SnapFixToast.show("Complaint verified successfully!", "success");
             loadAdminComplaints(user, currentFilter);
         } catch(err) {
-            alert(err.message);
+            if (window.SnapFixToast) window.SnapFixToast.show(err.message, "error");
         }
     };
 
     window.rejectComplaintAdmin = async function(complaintId) {
-        const reason = prompt("Enter reason for rejection (e.g., spam, invalid):");
+        if (!window.SnapFixModal) return;
+        const reason = await window.SnapFixModal.prompt(
+            "Reject Complaint",
+            "Enter reason for rejection (e.g., spam, invalid):",
+            "Enter reason..."
+        );
         if (reason === null) return;
         
         const user = auth.currentUser;
@@ -73,16 +78,21 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (!res.ok) throw new Error(data.error || "Failed to reject complaint");
             
-            alert("Complaint rejected.");
+            if (window.SnapFixToast) window.SnapFixToast.show("Complaint rejected.", "success");
             loadAdminComplaints(user, currentFilter);
         } catch(err) {
-            alert(err.message);
+            if (window.SnapFixToast) window.SnapFixToast.show(err.message, "error");
         }
     };
 
     window.assignWorker = async function(complaintId, workerId = null, force = false) {
         if (!workerId) {
-            workerId = prompt("Enter Worker Email or ID to assign:");
+            if (!window.SnapFixModal) return;
+            workerId = await window.SnapFixModal.prompt(
+                "Assign Worker",
+                "Enter Worker Email or ID to assign:",
+                "Worker Email or ID..."
+            );
             if (!workerId) return;
         }
 
@@ -102,7 +112,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await res.json();
             
             if (data.warning) {
-                if (confirm(data.message)) {
+                if (!window.SnapFixModal) return;
+                const forceAssign = await window.SnapFixModal.confirm(
+                    "Worker Warning",
+                    data.message,
+                    "Assign Anyway"
+                );
+                if (forceAssign) {
                     return assignWorker(complaintId, workerId, true);
                 } else {
                     return;
@@ -111,10 +127,10 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (!res.ok) throw new Error(data.error || "Failed to assign complaint");
             
-            alert("Complaint assigned to worker successfully!");
+            if (window.SnapFixToast) window.SnapFixToast.show("Complaint assigned to worker successfully!", "success");
             loadAdminComplaints(user, currentFilter);
         } catch(err) {
-            alert(err.message);
+            if (window.SnapFixToast) window.SnapFixToast.show(err.message, "error");
         }
     };
 
@@ -162,12 +178,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     else if (c.status === 'reopened') statusText = '<span style="color: #d97706; font-weight: bold; margin-right: 1rem;">Reopened ↻</span>';
                     else statusText = '<span style="color: green; font-weight: bold; margin-right: 1rem;">Verified ✓</span>';
                     
+                    if (c.assignment_state === 'rejected') {
+                        statusText += '<div style="color: #dc2626; font-weight: bold; margin-top: 5px; margin-bottom: 5px; font-size: 0.85rem;">Worker Rejected Assignment</div>';
+                    }
+                    
                     actionHtml = `
                         ${statusText}
-                        <button class="btn btn-secondary btn-sm" onclick="assignWorker('${c.id}')">Assign Worker</button>
+                        <button class="btn btn-secondary btn-sm" onclick="assignWorker('${c.id}')">${c.assignment_state === 'rejected' ? 'Reassign Worker' : 'Assign Worker'}</button>
                     `;
                 } else if (c.status === 'assigned') {
-                    actionHtml = `<span style="background: #e0e7ff; color: #4338ca; padding: 0.2rem 0.5rem; border-radius: 4px;">Assigned to: ${c.worker_id}</span>`;
+                    let assignText = 'ASSIGNED';
+                    if (c.assignment_state === 'pending') {
+                         assignText = 'PENDING ACCEPTANCE';
+                    } else if (c.assignment_state === 'accepted') {
+                         assignText = 'ACCEPTED / IN PROGRESS';
+                    }
+                    actionHtml = `<span style="background: #e0e7ff; color: #4338ca; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: bold; font-size: 0.85rem;">${assignText}: ${c.worker_id}</span>`;
                 }
                 
                 const overdueBadge = c.is_overdue ? `<span style="background: #fee2e2; color: #dc2626; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.8rem; font-weight: bold; margin-left: 0.5rem;">OVERDUE / ESCALATED</span>` : '';
@@ -191,13 +217,11 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <details style="margin-top: 5px;">
                                     <summary style="cursor: pointer; color: #0369a1; text-decoration: underline;">Priority Breakdown</summary>
                                     <div style="background: #f8fafc; border: 1px solid #e2e8f0; padding: 8px; border-radius: 4px; margin-top: 4px; font-family: monospace;">
-                                        Severity: +${c.priority_breakdown.severity}<br>
-                                        Evidence: +${c.priority_breakdown.evidence}<br>
-                                        Support : +${c.priority_breakdown.support}<br>
-                                        Age     : +${c.priority_breakdown.age}<br>
-                                        Reopens : +${c.priority_breakdown.reopens}<br>
+                                        Seriousness: +${c.priority_breakdown.seriousness}<br>
+                                        Days Passed: +${c.priority_breakdown.days_passed}<br>
+                                        Supporters : +${c.priority_breakdown.supporters}<br>
                                         <hr style="margin: 4px 0;">
-                                        Total   : ${c.priority_breakdown.total}
+                                        Total      : ${c.priority_breakdown.total}
                                     </div>
                                 </details>
                                 ` : ''}

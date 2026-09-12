@@ -73,6 +73,10 @@ def create_app():
     def admin_heatmap():
         return render_template('admin/heatmap.html')
 
+    @app.route('/admin/workers')
+    def admin_workers():
+        return render_template('admin/workers.html')
+
     # Run authority sync on startup
     with app.app_context():
         try:
