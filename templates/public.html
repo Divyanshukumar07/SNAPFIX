@@ -7,21 +7,21 @@
 </div>
 
 <!-- Tabs -->
-<div style="display: flex; gap: 1rem; border-bottom: 2px solid var(--border-color); margin-bottom: 1rem;">
-    <button id="tab-complaints" class="btn btn-secondary" style="border: none; border-radius: 0; border-bottom: 3px solid transparent;" onclick="setTab('complaints')">COMPLAINTS</button>
-    <button id="tab-inprogress" class="btn btn-secondary" style="border: none; border-radius: 0; border-bottom: 3px solid transparent;" onclick="setTab('inprogress')">IN PROGRESS</button>
-    <button id="tab-completed" class="btn btn-secondary" style="border: none; border-radius: 0; border-bottom: 3px solid transparent;" onclick="setTab('completed')">COMPLETED</button>
-    <button id="tab-track" class="btn btn-secondary" style="border: none; border-radius: 0; border-bottom: 3px solid transparent;" onclick="setTab('track')">TRACK REPORT</button>
+<div style="display: flex; gap: 1rem; border-bottom: 2px solid var(--border-color); margin-bottom: 1rem; flex-wrap: wrap;">
+    <button id="tab-complaints" class="btn btn-secondary" style="border: none; border-radius: 0; border-bottom: 3px solid transparent; flex: 1 1 auto; white-space: nowrap;" onclick="setTab('complaints')">COMPLAINTS</button>
+    <button id="tab-inprogress" class="btn btn-secondary" style="border: none; border-radius: 0; border-bottom: 3px solid transparent; flex: 1 1 auto; white-space: nowrap;" onclick="setTab('inprogress')">IN PROGRESS</button>
+    <button id="tab-completed" class="btn btn-secondary" style="border: none; border-radius: 0; border-bottom: 3px solid transparent; flex: 1 1 auto; white-space: nowrap;" onclick="setTab('completed')">COMPLETED</button>
+    <button id="tab-track" class="btn btn-secondary" style="border: none; border-radius: 0; border-bottom: 3px solid transparent; flex: 1 1 auto; white-space: nowrap;" onclick="setTab('track')">TRACK REPORT</button>
 </div>
 
 <!-- Dynamic content wrappers -->
 <div id="filters-container">
     <div class="card" style="padding: 1rem; margin-bottom: 1.5rem; background: #f8fafc; border: 1px dashed var(--border-color);">
         <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
-            <input type="text" id="search-input" placeholder="Search complaints..." style="flex: 1; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px;">
+            <input type="text" id="search-input" placeholder="Search complaints..." style="flex: 1; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; min-width: 0;">
         </div>
-        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-            <select id="filter-category" style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; flex: 1;">
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+            <select id="filter-category" style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; flex: 1 1 140px; min-width: 0;">
                 <option value="">Category ▼</option>
                 <option value="Garbage/Waste">Garbage/Waste</option>
                 <option value="Streetlight/Electrical">Streetlight/Electrical</option>
@@ -29,17 +29,17 @@
                 <option value="Water/Sewage">Water/Sewage</option>
                 <option value="Other">Other</option>
             </select>
-            <select id="filter-state" style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; flex: 1;">
+            <select id="filter-state" style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; flex: 1 1 100px; min-width: 0;">
                 <option value="">State ▼</option>
                 <option value="Goa" selected>Goa</option>
             </select>
-            <select id="filter-region" style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; flex: 1;">
+            <select id="filter-region" style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; flex: 1 1 120px; min-width: 0;">
                 <option value="">Region ▼</option>
                 <option value="North Goa">North Goa</option>
                 <option value="South Goa">South Goa</option>
             </select>
-            <input type="text" id="filter-locality" placeholder="Locality ▼" style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; flex: 1;">
-            <button class="btn btn-secondary btn-sm" onclick="clearFilters()">Clear Filters</button>
+            <input type="text" id="filter-locality" placeholder="Locality ▼" style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; flex: 1 1 120px; min-width: 0;">
+            <button class="btn btn-secondary btn-sm" onclick="clearFilters()" style="flex: 0 0 auto; white-space: nowrap; padding: 0.5rem 1rem;">Clear Filters</button>
         </div>
     </div>
 </div>
@@ -48,9 +48,9 @@
     <div class="card" style="padding: 2rem; text-align: center; background: #f8fafc; border: 1px dashed var(--border-color);">
         <h3 style="margin-bottom: 1rem;">Track Your Report</h3>
         <p class="text-muted" style="margin-bottom: 1.5rem;">Enter your unique Report ID to check its real-time status and timeline.</p>
-        <div style="display: flex; gap: 0.5rem; max-width: 500px; margin: 0 auto;">
-            <input type="text" id="track-input" placeholder="e.g. SNF-2026-000184" style="flex: 1; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 4px; font-size: 1.1rem; text-transform: uppercase;">
-            <button class="btn btn-primary" onclick="trackComplaint()">Track</button>
+        <div style="display: flex; gap: 0.5rem; max-width: 500px; margin: 0 auto; flex-wrap: wrap;">
+            <input type="text" id="track-input" placeholder="e.g. SNF-2026-000184" style="flex: 1 1 200px; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 4px; font-size: 1.1rem; text-transform: uppercase; min-width: 0;">
+            <button class="btn btn-primary" onclick="trackComplaint()" style="flex: 0 0 auto;">Track</button>
         </div>
         <div id="track-result" style="margin-top: 2rem; text-align: left;"></div>
     </div>
@@ -275,14 +275,14 @@ function renderComplaints() {
         const date = new Date(c.created_at).toLocaleDateString();
         
         html += `
-            <div class="card" style="padding: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius); background: #fff; display: flex; align-items: center; justify-content: space-between;">
-                <div style="flex: 1; overflow: hidden; padding-right: 1rem;">
+            <div class="card" style="padding: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius); background: #fff; display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+                <div style="flex: 1 1 250px; min-width: 0;">
                     <div style="display: flex; justify-content: flex-start; gap: 1rem; margin-bottom: 0.25rem;">
                         <span style="font-size: 0.8rem; font-weight: bold; color: var(--text-muted);">${c.report_id || 'ID: ' + c.id.substring(0,8)}</span>
                         <span style="font-weight: bold; color: var(--primary-color)">${c.category}</span>
                     </div>
-                    <div style="display: flex; justify-content: flex-start; gap: 1rem; margin-bottom: 0.5rem; align-items: center;">
-                        <h4 style="margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%;">${c.description || 'No description'}</h4>
+                    <div style="display: flex; justify-content: flex-start; gap: 1rem; margin-bottom: 0.5rem; align-items: center; flex-wrap: wrap;">
+                        <h4 style="margin: 0; word-break: break-word;">${c.description || 'No description'}</h4>
                         <span style="background: #e2e8f0; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.85rem; font-weight: bold; white-space: nowrap;">${
                             String(c.status || '').trim().toLowerCase() === 'completed' && String(c.assignment_state || '').trim().toLowerCase() === 'proof_submitted'
                             ? 'AWAITING VERIFICATION'
@@ -295,7 +295,7 @@ function renderComplaints() {
                         <span style="font-size: 0.9rem; font-weight: bold; color: #d97706;">👍 ${c.support_count} Supporters</span>
                     </div>
                 </div>
-                <div class="card-actions" style="display: flex; align-items: center; justify-content: flex-end; padding-right: 0.5rem;">
+                <div class="card-actions" style="display: flex; align-items: center; justify-content: flex-end; flex: 0 0 auto;">
                     <button class="btn btn-secondary btn-sm" onclick="openDetails('${c.id}')" style="white-space: nowrap;">View Details</button>
                 </div>
             </div>
