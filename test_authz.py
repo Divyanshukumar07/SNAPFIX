@@ -60,6 +60,31 @@ class TestAuthorization(unittest.TestCase):
         # Can't access worker endpoints
         res = self.client.get('/api/worker/complaints')
         self.assertEqual(res.status_code, 403)
+        
+    def test_idor_complaint_fetch(self):
+        self.set_mock_user("citizen", uid="requester-uid")
+        
+        # Mock a complaint fetched from Firestore
+        import unittest.mock
+        mock_doc = unittest.mock.Mock()
+        mock_doc.exists = True
+        mock_doc.id = "mock-id"
+        mock_doc.to_dict.return_value = {
+            "citizen_id": "owner-uid",
+            "citizen_email": "owner@example.com",
+            "category": "Garbage"
+        }
+        
+        with unittest.mock.patch('routes.db') as mock_db:
+            mock_db.collection.return_value.document.return_value.get.return_value = mock_doc
+            
+            res = self.client.get('/api/complaints/mock-id')
+            self.assertEqual(res.status_code, 200)
+            
+            data = res.json
+            self.assertNotIn('citizen_id', data)
+            self.assertNotIn('citizen_email', data)
+            self.assertEqual(data.get('category'), "Garbage")
 
 if __name__ == '__main__':
     unittest.main()

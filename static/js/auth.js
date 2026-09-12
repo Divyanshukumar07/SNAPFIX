@@ -83,6 +83,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
 
+                // Optimistic UI update to prevent flashing Login/Signup
+                navLinks.innerHTML = `<span>${user.email} (Loading...)</span>`;
+
                 // Normal authenticated state - Fetch Role from Backend
                 const token = await user.getIdToken();
                 try {
@@ -101,25 +104,39 @@ document.addEventListener('DOMContentLoaded', () => {
                     else if (['city_admin', 'main_authority', 'department_head'].includes(role)) dashboardPath = '/admin/dashboard';
 
                     if (path === '/login' || path === '/register') {
-                        window.location.href = dashboardPath;
+                        const urlParams = new URLSearchParams(window.location.search);
+                        const nextUrl = urlParams.get('next');
+                        if (nextUrl && nextUrl.startsWith('/')) {
+                            window.location.replace(nextUrl);
+                        } else {
+                            window.location.replace(dashboardPath);
+                        }
                         return;
                     }
 
                     // DOM Interception for Unauthorized Access
                     if (authGuard) {
                         const allowedRolesStr = authGuard.getAttribute('data-allowed-roles');
+                        const pageName = authGuard.getAttribute('data-page-name') || 'this area';
                         if (allowedRolesStr) {
                             const allowedRoles = allowedRolesStr.split(',').map(r => r.trim());
                             if (!allowedRoles.includes(role)) {
-                                document.querySelector('main').innerHTML = `
+                                document.body.innerHTML = `
                                     <div class="card" style="text-align: center; padding: 4rem 2rem; max-width: 500px; margin: 4rem auto;">
                                         <h2 style="color: var(--danger-color); margin-bottom: 1rem;">🔒 Access Restricted</h2>
-                                        <p style="margin-bottom: 2rem;">You don't have permission to access this area. This section is available only to authorized users.</p>
-                                        <a href="${dashboardPath}" class="btn btn-primary">Return to Dashboard</a>
+                                        <p style="margin-bottom: 1rem;">You don't have permission to access <strong>${pageName}</strong>.</p>
+                                        <p style="margin-bottom: 2rem; color: #64748b; font-size: 0.9em;">Required role(s): ${allowedRoles.join(', ')}</p>
+                                        <a href="${dashboardPath}" class="btn btn-primary">Return to My Dashboard</a>
                                     </div>
                                 `;
                                 return; // Halt further page execution
                             }
+                        }
+                        // Reveal page content if authorized (Anti-Flicker)
+                        const mainContent = document.querySelector('main') || document.querySelector('.container');
+                        if (mainContent) {
+                            mainContent.style.visibility = 'visible';
+                            mainContent.style.opacity = '1';
                         }
                     }
 
@@ -127,17 +144,25 @@ document.addEventListener('DOMContentLoaded', () => {
                     let navHtml = `<span>${user.email} (${role.toUpperCase()}) ✅</span>`;
                     
                     if (role === 'citizen') {
-                        navHtml += `<a href="/dashboard">My Dashboard</a>`;
-                        navHtml += `<a href="/complaints/new">Report Issue</a>`;
+                        navHtml += `<a href="/dashboard">Dashboard</a>`;
+                        navHtml += `<a href="/complaints/new">Report Complaint</a>`;
                     } else if (role === 'service_worker') {
                         navHtml += `<a href="/worker/dashboard">Worker Dashboard</a>`;
+                        navHtml += `<a href="/dashboard">My Complaints</a>`;
+                        navHtml += `<a href="/complaints/new">Report Complaint</a>`;
                     } else if (role === 'department_head') {
                         navHtml += `<a href="/admin/dashboard">Dept Dashboard</a>`;
+                        navHtml += `<a href="/dashboard">My Complaints</a>`;
+                        navHtml += `<a href="/complaints/new">Report Complaint</a>`;
                     } else if (['city_admin', 'main_authority'].includes(role)) {
                         navHtml += `<a href="/admin/dashboard">City Dashboard</a>`;
                         navHtml += `<a href="/admin/heatmap">Civic Map</a>`;
+                        navHtml += `<a href="/admin/users">User Management</a>`;
+                        navHtml += `<a href="/dashboard">My Complaints</a>`;
+                        navHtml += `<a href="/complaints/new">Report Complaint</a>`;
                     }
                     
+                    navHtml += `<a href="/public">Public Wall</a>`;
                     navHtml += `<button id="nav-logout" class="btn btn-secondary" style="padding: 0.3rem 0.8rem; margin-left: 1rem;">Logout</button>`;
                     navLinks.innerHTML = navHtml;
 
@@ -161,15 +186,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
         } else {
             // User is signed out
-            navLinks.innerHTML = `
-                <a href="/login" id="nav-login">Login</a>
-                <a href="/register" id="nav-register" class="btn btn-primary">Register</a>
-            `;
-            
-            if (requiresAuth || path === '/verify') {
+            if (requiresAuth) {
+                // Use replace() to avoid polluting the history stack.
+                // This ensures hitting 'Back' from the login page returns them 
+                // to the public page they were on before, not the protected page.
+                const nextUrl = encodeURIComponent(window.location.pathname);
+                window.location.replace('/login?next=' + nextUrl);
+                return;
+            }
+
+            if (path === '/verify') {
                 window.location.href = '/login';
                 return;
             }
+            
+            navLinks.innerHTML = `
+                <a href="/public">Public Wall</a>
+                <a href="/login">Login</a>
+                <a href="/register" class="btn btn-primary">Register</a>
+            `;
 
             // Check URL for prefilled verified email
             if (path === '/login') {
@@ -189,6 +224,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
             }
+        }
+    });
+
+    // BFCache (Back/Forward Cache) Revalidation
+    window.addEventListener('pageshow', (event) => {
+        if (event.persisted && requiresAuth) {
+            window.location.reload();
         }
     });
 
@@ -304,7 +346,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     return userCredential.user.updateProfile({
                         displayName: name
                     }).then(() => {
-                        return userCredential.user.sendEmailVerification();
+                        return userCredential.user.sendEmailVerification()
+                            .catch(err => {
+                                console.warn("First verification email attempt failed. Retrying...", err);
+                                // Firebase sometimes drops the first verification email immediately after signup
+                                return new Promise(resolve => setTimeout(resolve, 2000)).then(() => {
+                                    return userCredential.user.sendEmailVerification();
+                                });
+                            });
                     });
                 })
                 .then(() => {
@@ -351,6 +400,77 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch(err) { alert(err.message); }
     };
 
+    window.deleteComplaint = async function(complaintId) {
+        if (!confirm("Are you sure you want to delete this complaint? This action cannot be undone.")) return;
+        const user = auth.currentUser;
+        if (!user) return;
+        try {
+            const token = await user.getIdToken();
+            const res = await fetch(`/api/complaints/${complaintId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            if (!res.ok) throw new Error("Failed to delete complaint. It may already be assigned.");
+            loadDashboardComplaints(user);
+        } catch(err) { alert(err.message); }
+    };
+
+    window.currentDashboardComplaints = [];
+    window.currentEditComplaintId = null;
+
+    window.editComplaint = function(complaintId) {
+        const c = window.currentDashboardComplaints.find(x => x.id === complaintId);
+        if (!c) return;
+        window.currentEditComplaintId = complaintId;
+        
+        const descInput = document.getElementById('edit-complaint-desc');
+        if (descInput) {
+            descInput.value = c.description || '';
+            document.getElementById('edit-complaint-modal').style.display = 'flex';
+        }
+    };
+
+    window.closeEditModal = function() {
+        const modal = document.getElementById('edit-complaint-modal');
+        if (modal) modal.style.display = 'none';
+        window.currentEditComplaintId = null;
+    };
+
+    window.saveComplaintEdit = async function() {
+        if (!window.currentEditComplaintId) return;
+        const newDesc = document.getElementById('edit-complaint-desc').value;
+        const c = window.currentDashboardComplaints.find(x => x.id === window.currentEditComplaintId);
+        if (newDesc.trim() === "" || (c && newDesc === c.description)) {
+            closeEditModal();
+            return;
+        }
+        
+        const btn = document.getElementById('btn-save-edit');
+        if (btn) { btn.disabled = true; btn.innerText = 'Saving...'; }
+        
+        const user = auth.currentUser;
+        if (!user) return;
+        try {
+            const token = await user.getIdToken();
+            const res = await fetch(`/api/complaints/${window.currentEditComplaintId}`, {
+                method: 'PUT',
+                headers: { 
+                    'Authorization': 'Bearer ' + token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ description: newDesc.trim() })
+            });
+            if (!res.ok) throw new Error("Failed to edit complaint. It may already be assigned or verified.");
+            
+            closeEditModal();
+            loadDashboardComplaints(user);
+        } catch(err) { 
+            alert(err.message); 
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerText = 'Save Changes'; }
+        }
+    };
+
     async function loadDashboardComplaints(user) {
         const listEl = document.getElementById('complaints-list');
         if (!listEl) return;
@@ -363,9 +483,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: { 'Authorization': 'Bearer ' + token }
             });
 
-            if (!response.ok) throw new Error("Failed to fetch complaints");
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(`Failed to fetch complaints (Status: ${response.status}): ${errData.error || response.statusText}`);
+            }
 
             const complaints = await response.json();
+            window.currentDashboardComplaints = complaints;
 
             if (complaints.length === 0) {
                 listEl.innerHTML = `
@@ -393,10 +517,24 @@ document.addEventListener('DOMContentLoaded', () => {
                         <h4 style="margin-bottom: 0.5rem;">${c.description || 'No description provided'}</h4>
                         <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 0.5rem;">📍 ${c.location_text || c.location || 'Unknown location'}</p>
                         
-                        <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                        <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: center; flex-wrap: wrap;">
                             <span style="background: #f1f5f9; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">🏢 ${dept}</span>
                             <span style="background: #f1f5f9; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">👍 ${supporters} Supporters</span>
-                            <span style="background: #fef3c7; color: #b45309; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">🔥 Priority: ${priority}</span>
+                            
+                            <details style="background: #fef3c7; color: #b45309; border-radius: 4px; font-size: 0.8rem; border: 1px solid #fde68a;">
+                                <summary style="padding: 0.2rem 0.5rem; cursor: pointer; font-weight: bold; list-style-type: none;">🔥 Priority: ${priority} ▾</summary>
+                                ${c.priority_breakdown ? `
+                                <div style="padding: 0.5rem; border-top: 1px solid #fde68a; font-family: monospace;">
+                                    Severity: +${c.priority_breakdown.severity}<br>
+                                    Evidence: +${c.priority_breakdown.evidence}<br>
+                                    Support : +${c.priority_breakdown.support}<br>
+                                    Age     : +${c.priority_breakdown.age}<br>
+                                    Reopens : +${c.priority_breakdown.reopens}<br>
+                                    <hr style="margin: 4px 0; border-color: #fcd34d;">
+                                    Total   : ${c.priority_breakdown.total}
+                                </div>
+                                ` : ''}
+                            </details>
                         </div>
                         
                         ${c.status === 'completed' ? `
@@ -409,11 +547,39 @@ document.addEventListener('DOMContentLoaded', () => {
                             </div>
                         </div>
                         ` : ''}
+                        
+                        ${c.status === 'pending_verification' ? `
+                        <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                            <button class="btn btn-secondary btn-sm" onclick="editComplaint('${c.id}')">Edit</button>
+                            <button class="btn btn-secondary btn-sm" style="color: var(--danger-color); border-color: var(--danger-color);" onclick="deleteComplaint('${c.id}')">Delete</button>
+                        </div>
+                        ` : `
+                        <div style="margin-bottom: 1rem;">
+                            <span class="text-muted" style="font-size: 0.85rem;">(Editing blocked: Worker assigned or status progressed)</span>
+                        </div>
+                        `}
 
                         <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-muted); border-top: 1px solid var(--border-color); padding-top: 0.5rem;">
                             <span>ID: ${c.id.substring(0, 8)}...</span>
                             <span>Reported: ${date}</span>
                         </div>
+                        
+                        ${c.history && c.history.length > 0 ? `
+                        <details style="margin-top: 1rem; border-top: 1px dashed #cbd5e1; padding-top: 1rem;">
+                            <summary style="cursor: pointer; font-weight: bold; color: #475569;">Activity Timeline (${c.history.length})</summary>
+                            <div style="margin-top: 0.5rem; padding-left: 1rem; border-left: 2px solid #e2e8f0;">
+                                ${c.history.map(h => `
+                                    <div style="margin-bottom: 0.8rem; position: relative;">
+                                        <div style="position: absolute; left: -1.4rem; top: 0.2rem; width: 0.6rem; height: 0.6rem; background: var(--primary-color); border-radius: 50%;"></div>
+                                        <div style="font-size: 0.8rem; color: #64748b;">${new Date(h.timestamp).toLocaleString()}</div>
+                                        <div style="font-weight: bold; font-size: 0.9rem;">${h.action.replace('_', ' ')}</div>
+                                        <div style="font-size: 0.85rem;">By: ${h.actor_role.replace('_', ' ')}</div>
+                                        ${h.details ? `<div style="font-size: 0.85rem; color: #475569; margin-top: 2px;"><i>${h.details}</i></div>` : ''}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </details>
+                        ` : ''}
                     </div>
                 `;
             });

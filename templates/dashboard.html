@@ -2,7 +2,7 @@
 
 {% block content %}
 <!-- Add data attribute to indicate this route requires auth -->
-<div id="auth-guard" data-requires-auth="true" data-allowed-roles="citizen" style="display: none;"></div>
+<div id="auth-guard" data-requires-auth="true" data-allowed-roles="citizen,service_worker,department_head,city_admin,main_authority" data-page-name="My Complaints" style="display: none;"></div>
 
 <div class="dashboard-header">
     <h2>Citizen Dashboard</h2>
@@ -22,6 +22,24 @@
     <h3>Your Recent Complaints</h3>
     <div id="complaints-list" class="complaints-list">
         <p class="text-muted">Loading complaints...</p>
+    </div>
+</div>
+
+<!-- Edit Complaint Modal -->
+<div id="edit-complaint-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="width: 90%; max-width: 500px;">
+        <h3 style="margin-bottom: 1rem;">Edit Complaint</h3>
+        <p class="text-muted" style="margin-bottom: 1rem; font-size: 0.9rem;">You can only edit your complaint before it is verified.</p>
+        
+        <div class="form-group">
+            <label>Description (Please provide details)</label>
+            <textarea id="edit-complaint-desc" class="form-control" rows="5" style="width: 100%; padding: 0.5rem;"></textarea>
+        </div>
+        
+        <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
+            <button class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
+            <button class="btn btn-primary" id="btn-save-edit" onclick="saveComplaintEdit()">Save Changes</button>
+        </div>
     </div>
 </div>
 {% endblock %}

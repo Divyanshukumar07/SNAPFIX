@@ -74,6 +74,40 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    window.markFalseReport = async function(complaintId) {
+        const reason = prompt("Enter reason for marking as False Report (e.g. 'Issue not found'):");
+        if (!reason || reason.trim() === '') {
+            return;
+        }
+
+        if (!confirm("Are you sure you want to mark this as a False Report? This will be recorded against the citizen.")) {
+            return;
+        }
+
+        const user = auth.currentUser;
+        if (!user) return;
+        
+        try {
+            const token = await user.getIdToken();
+            const res = await fetch(`/api/worker/complaints/${complaintId}/false_report`, {
+                method: 'POST',
+                headers: { 
+                    'Authorization': 'Bearer ' + token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ reason: reason })
+            });
+            const data = await res.json();
+            
+            if (!res.ok) throw new Error(data.error || "Failed to mark false report");
+            
+            alert("Complaint marked as False Report successfully.");
+            loadWorkerComplaints(user);
+        } catch(err) {
+            alert(err.message);
+        }
+    };
+
     async function loadWorkerComplaints(user) {
         const listEl = document.getElementById('worker-complaints-list');
         const errEl = document.getElementById('worker-error');
@@ -108,13 +142,20 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed #ccc;">
                             <label style="display:block; margin-bottom: 0.5rem; font-weight:bold;">Upload Proof of Completion</label>
                             <input type="file" id="proof-file-${c.id}" accept="image/png, image/jpeg" style="margin-bottom: 0.5rem;">
-                            <button id="btn-proof-${c.id}" class="btn btn-primary btn-sm" onclick="uploadProof('${c.id}')">Submit Proof</button>
+                            <div style="display: flex; gap: 1rem;">
+                                <button id="btn-proof-${c.id}" class="btn btn-primary btn-sm" onclick="uploadProof('${c.id}')">Submit Proof</button>
+                                <button class="btn btn-danger btn-sm" onclick="markFalseReport('${c.id}')">Mark as False Report</button>
+                            </div>
                         </div>
                     `;
                 } else if (c.status === 'completed') {
-                    actionHtml = `<div style="margin-top:1rem;"><span style="color: green; font-weight: bold;">Work Completed ✓</span> <br><a href="${c.proof_image_url}" target="_blank" style="font-size:0.9rem;">View Uploaded Proof</a></div>`;
+                    actionHtml = `<div style="margin-top:1rem;"><span style="color: green; font-weight: bold;">Work Completed ✓</span></div>`;
                 } else {
                     actionHtml = `<div style="margin-top:1rem;"><span style="color: #666; font-weight: bold;">Status: ${c.status}</span></div>`;
+                }
+                
+                if (c.proof_image_url) {
+                    actionHtml += `<div style="margin-top: 0.5rem;"><a href="${c.proof_image_url}" target="_blank" style="font-size:0.9rem; color: var(--primary-color);">View Uploaded Proof</a></div>`;
                 }
                 
                 html += `

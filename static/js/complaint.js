@@ -24,6 +24,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // State
     let isBypassingDuplicateCheck = false;
 
+    auth.onAuthStateChanged(user => {
+        if (user && !user.emailVerified) {
+            showError("Your email address is unverified. You must verify your email before submitting complaints.");
+            btnSubmit.disabled = true;
+            Array.from(form.elements).forEach(el => el.disabled = true);
+        }
+    });
+
     function showError(msg) {
         errEl.innerText = msg;
         errEl.style.display = 'block';
@@ -52,26 +60,78 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnGetLocation) {
         btnGetLocation.addEventListener('click', () => {
             if (!navigator.geolocation) {
-                locStatus.innerText = "Geolocation is not supported by your browser";
+                if (window.isSecureContext === false) {
+                    locStatus.innerHTML = `Location requires HTTPS. <button type="button" id="btn-mock-loc" class="btn btn-secondary btn-sm" style="margin-left: 10px;">Mock Location (Test)</button>`;
+                    locStatus.style.color = '#d97706'; // warning color
+                    
+                    document.getElementById('btn-mock-loc').addEventListener('click', () => {
+                        latInput.value = 40.7128;
+                        lngInput.value = -74.0060;
+                        locStatus.innerHTML = `Mocked! (40.7128, -74.0060)<br><iframe width="100%" height="200" src="https://www.openstreetmap.org/export/embed.html?bbox=-74.0160,40.7028,-73.9960,40.7228&layer=mapnik&marker=40.7128,-74.0060" style="border: 1px solid #e2e8f0; border-radius: 8px; margin-top: 10px;"></iframe>`;
+                        locStatus.style.color = 'green';
+                    });
+                } else {
+                    locStatus.innerText = "Geolocation is not supported by your browser.";
+                    locStatus.style.color = 'red';
+                }
                 return;
             }
             
             btnGetLocation.disabled = true;
             locStatus.innerText = "Locating...";
+            locStatus.style.color = 'var(--text-color)';
 
             navigator.geolocation.getCurrentPosition(
                 (position) => {
-                    latInput.value = position.coords.latitude;
-                    lngInput.value = position.coords.longitude;
-                    locStatus.innerText = `Found! (${position.coords.latitude.toFixed(4)}, ${position.coords.longitude.toFixed(4)})`;
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    latInput.value = lat;
+                    lngInput.value = lng;
+                    
+                    // Show a map preview using OSM
+                    const bbox = `${lng-0.01},${lat-0.01},${lng+0.01},${lat+0.01}`;
+                    locStatus.innerHTML = `Found! (${lat.toFixed(4)}, ${lng.toFixed(4)})<br>
+                        <iframe width="100%" height="200" src="https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${lat},${lng}" style="border: 1px solid #e2e8f0; border-radius: 8px; margin-top: 10px;"></iframe>`;
                     locStatus.style.color = 'green';
                     btnGetLocation.disabled = false;
                 },
                 (error) => {
-                    locStatus.innerText = "Unable to retrieve your location.";
+                    let msg = "Unable to retrieve your location.";
+                    if (error.code === error.PERMISSION_DENIED) {
+                        msg = "Location permission was denied.";
+                    } else if (error.code === error.POSITION_UNAVAILABLE) {
+                        msg = "Location information is currently unavailable.";
+                    } else if (error.code === error.TIMEOUT) {
+                        msg = "Location request timed out.";
+                    }
+                    
+                    if (window.isSecureContext === false) {
+                        msg += " Note: Browsers block location on non-HTTPS networks.";
+                        msg += `<br><button type="button" id="btn-mock-loc-err" class="btn btn-secondary btn-sm" style="margin-top: 10px;">Mock Location (Test)</button>`;
+                        
+                        // Need a small timeout to let innerHTML render before attaching listener
+                        setTimeout(() => {
+                            const btn = document.getElementById('btn-mock-loc-err');
+                            if(btn) {
+                                btn.addEventListener('click', () => {
+                                    latInput.value = 40.7128;
+                                    lngInput.value = -74.0060;
+                                    locStatus.innerHTML = `Mocked! (40.7128, -74.0060)<br><iframe width="100%" height="200" src="https://www.openstreetmap.org/export/embed.html?bbox=-74.0160,40.7028,-73.9960,40.7228&layer=mapnik&marker=40.7128,-74.0060" style="border: 1px solid #e2e8f0; border-radius: 8px; margin-top: 10px;"></iframe>`;
+                                    locStatus.style.color = 'green';
+                                });
+                            }
+                        }, 50);
+                    }
+                    
+                    locStatus.innerHTML = msg;
                     locStatus.style.color = 'red';
                     btnGetLocation.disabled = false;
-                    console.warn(error);
+                    console.warn("Geolocation Error:", error);
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
                 }
             );
         });
@@ -131,6 +191,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const category = document.getElementById('category').value;
             const description = document.getElementById('description').value;
+            
+            const location_state = document.getElementById('location_state') ? document.getElementById('location_state').value : '';
+            const location_region = document.getElementById('location_region') ? document.getElementById('location_region').value : '';
+            const location_locality = document.getElementById('location_locality') ? document.getElementById('location_locality').value : '';
+            
             const location_text = document.getElementById('location_text').value;
             const lat = parseFloat(latInput.value) || null;
             const lng = parseFloat(lngInput.value) || null;
@@ -148,7 +213,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     const checkRes = await fetch('/api/complaints/check_duplicate', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ category, location_lat: lat, location_lng: lng })
+                        body: JSON.stringify({ 
+                            category, 
+                            description,
+                            location_lat: lat, 
+                            location_lng: lng,
+                            location_state,
+                            location_region,
+                            location_locality
+                        })
                     });
                     
                     if (checkRes.ok) {
@@ -211,6 +284,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const payload = {
                     category: category,
                     description: description,
+                    location_state: location_state,
+                    location_region: location_region,
+                    location_locality: location_locality,
                     location_text: location_text,
                     location_lat: lat,
                     location_lng: lng,

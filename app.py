@@ -33,6 +33,10 @@ def create_app():
     def index():
         return render_template('index.html')
         
+    @app.route('/public')
+    def public_wall():
+        return render_template('public.html')
+        
     @app.route('/login')
     def login():
         return render_template('auth/login.html')
@@ -57,6 +61,10 @@ def create_app():
     def admin_dashboard():
         return render_template('admin/dashboard.html')
 
+    @app.route('/admin/users')
+    def admin_users():
+        return render_template('admin/users.html')
+
     @app.route('/worker/dashboard')
     def worker_dashboard():
         return render_template('worker/dashboard.html')
@@ -64,6 +72,14 @@ def create_app():
     @app.route('/admin/heatmap')
     def admin_heatmap():
         return render_template('admin/heatmap.html')
+
+    # Run authority sync on startup
+    with app.app_context():
+        try:
+            from authority_sync import sync_authority
+            sync_authority()
+        except Exception as e:
+            print(f"Error running authority sync during startup: {e}")
 
     return app
 

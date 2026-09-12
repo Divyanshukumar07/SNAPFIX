@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div id="auth-guard" data-requires-auth="true" style="display: none;"></div>
+<div id="auth-guard" data-requires-auth="true" data-allowed-roles="citizen,service_worker,department_head,city_admin,main_authority" data-page-name="Report Civic Issue" style="display: none;"></div>
 
 <div class="dashboard-header">
     <h2>Report a Civic Issue</h2>
@@ -41,8 +41,27 @@
             <textarea id="description" name="description" required rows="4" style="width: 100%; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 1rem; font-family: inherit;" placeholder="Describe the issue in detail..."></textarea>
         </div>
 
+        <div class="form-group" style="background: #f8fafc; padding: 1rem; border-radius: var(--radius); border: 1px dashed var(--border-color);">
+            <label>Location Hierarchy</label>
+            <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+                <select id="location_state" name="location_state" required style="flex: 1; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 1rem;">
+                    <option value="" disabled selected>State</option>
+                    <option value="Goa">Goa</option>
+                    <option value="Maharashtra">Maharashtra</option>
+                    <option value="Karnataka">Karnataka</option>
+                </select>
+                <select id="location_region" name="location_region" required style="flex: 1; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 1rem;">
+                    <option value="" disabled selected>Region / District</option>
+                    <option value="North Goa">North Goa</option>
+                    <option value="South Goa">South Goa</option>
+                    <option value="Mumbai">Mumbai</option>
+                </select>
+                <input type="text" id="location_locality" name="location_locality" required placeholder="Locality / Neighborhood" style="flex: 1; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: var(--radius); font-size: 1rem;">
+            </div>
+        </div>
+
         <div class="form-group">
-            <label for="location_text">Location / Address</label>
+            <label for="location_text">Specific Landmark / Address</label>
             <input type="text" id="location_text" name="location_text" required placeholder="e.g. Near Central Park entrance">
         </div>
 

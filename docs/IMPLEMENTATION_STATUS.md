@@ -34,7 +34,12 @@ Normal public registration creates only `citizen` roles.
 4. **Service Worker**: Scoped to view and resolve complaints ONLY assigned directly to them.
 5. **Citizen**: Can create complaints, view own complaints, and confirm/reject resolutions.
 
-Roles can only be elevated securely via the backend `seed_roles.py` tool.
+Roles can only be elevated securely via the backend `User Management Panel` or the Root Bootstrap mechanism.
+
+### 5.1 Root Authority Bootstrap
+- The system supports zero-touch provisioning of the first `main_authority`. 
+- By setting `ROOT_AUTHORITY_EMAIL` in `.env`, the system automatically promotes this user when they authenticate for the first time.
+- The system safely prevents demoting the last active `main_authority`.
 
 ## 6. Features Required by the Original DOCX
 - OTP-Based Authentication
@@ -78,6 +83,8 @@ Roles can only be elevated securely via the backend `seed_roles.py` tool.
 ✅ **Escalation Logic** (Lazy evaluation of age/status to surface OVERDUE badges dynamically without background workers)
 ✅ **Dashboard Statistics** (Admin UI shows Total, Pending, and Resolved using efficient `count()` aggregation in Firestore)
 ✅ **Civic Issue Heatmap** (Leaflet.js integration plotting complaints by latitude/longitude, color-coded by status and severity, scaled by support count)
+✅ **User Management Panel** (P0): Complete backend and frontend to safely promote users, assign departments, and track roles in a Firestore `admin_actions` collection.
+✅ **IDOR Protection**: The public `GET /api/complaints/<id>` endpoint now safely strips PII (like `citizen_id` and `citizen_email`) if the requester is not the owner.
 ✅ **UI Polish** (Enhanced form inputs, improved shadows, consistent typography, card hover animations)
 
 ## 7. Features Currently Being Implemented

@@ -1,38 +1,135 @@
+import os
 from flask import Blueprint, request, jsonify, g
-from functools import wraps
-from datetime import datetime
-from config import Config
-from firebase_admin import auth
-from firebase import db
+from datetime import datetime, timedelta
+import firebase_admin
+from firebase_admin import auth, firestore
 import cloudinary
 import cloudinary.uploader
+import cloudinary.api
+from functools import wraps
 import math
+from config import Config
+from firebase import db
 
 api = Blueprint('api', __name__)
 
-def calculate_priority(category, support_count, created_at_iso):
+def contains_profanity(text):
+    if not text:
+        return False
+    bad_words = {'fuck', 'shit', 'bitch', 'asshole', 'cunt', 'dick', 'bastard', 'slut', 'whore'}
+    words = text.lower().split()
+    for word in words:
+        clean_word = "".join(c for c in word if c.isalpha())
+        if clean_word in bad_words:
+            return True
+    return False
+
+def add_complaint_history(event_type, user_dict, prev_status, new_status, details=None, worker_uid=None):
     """
-    Priority = severity_weight + support_count + age_in_days
+    Returns a structured dictionary representing a complaint lifecycle event.
+    Must be appended to the complaint's history array using firestore.ArrayUnion.
+    """
+    event = {
+        "action": event_type,
+        "timestamp": datetime.utcnow().isoformat(),
+        "actor_uid": user_dict.get('uid', 'unknown'),
+        "actor_role": user_dict.get('role', 'unknown'),
+        "previous_status": prev_status,
+        "new_status": new_status
+    }
+    
+    if user_dict.get('email'):
+        event['actor_email'] = user_dict.get('email')
+        
+    if user_dict.get('department_id'):
+        event['actor_department'] = user_dict.get('department_id')
+        
+    if details:
+        event['details'] = details
+        
+    if worker_uid:
+        event['worker_uid'] = worker_uid
+        
+    return event
+
+def calculate_priority(category, support_count, created_at_iso, has_evidence=False, reopen_count=0):
+    """
+    Priority Score out of 100 max:
+    - Base Severity: up to 25
+    - Support: up to 30 (cap at 30 supporters)
+    - Age: up to 20 (cap at 20 days)
+    - Evidence: +10 if proof exists
+    - Reopened: +10 per reopen (cap at 20)
     """
     severity_map = {
-        "Garbage/Waste": 2,
-        "Streetlight/Electrical": 3,
-        "Roads & Potholes": 4,
-        "Roads": 4,
-        "Water/Sewage": 5,
-        "Other Civic Issue": 1,
-        "Other": 1
+        "Garbage/Waste": 10,
+        "Streetlight/Electrical": 15,
+        "Roads & Potholes": 20,
+        "Roads": 20,
+        "Water/Sewage": 25,
+        "Other Civic Issue": 5,
+        "Other": 5
     }
-    severity = severity_map.get(category, 1)
+    base_severity = severity_map.get(category, 5)
     
     try:
         created_date = datetime.fromisoformat(created_at_iso)
         age_days = (datetime.utcnow() - created_date).days
-        age_days = max(0, age_days)
+        age_score = min(max(0, age_days), 20)
     except:
-        age_days = 0
+        age_score = 0
         
-    return severity + support_count + age_days
+    support_score = min(support_count, 30)
+    evidence_score = 10 if has_evidence else 0
+    reopen_score = min(reopen_count * 10, 20)
+    
+    total_score = base_severity + age_score + support_score + evidence_score + reopen_score
+    return min(max(total_score, 1), 100)
+
+def get_priority_breakdown(c):
+    """
+    Returns a dictionary breakdown of how the priority score was calculated
+    based strictly on the existing calculate_priority logic.
+    """
+    category = c.get('category', 'General')
+    support_count = c.get('support_count', 1)
+    created_at_iso = c.get('created_at', datetime.utcnow().isoformat())
+    has_evidence = bool(c.get('image_url'))
+    reopen_count = c.get('reopen_count', 0)
+    
+    severity_map = {
+        "Garbage/Waste": 10,
+        "Streetlight/Electrical": 15,
+        "Roads & Potholes": 20,
+        "Roads": 20,
+        "Water/Sewage": 25,
+        "Other Civic Issue": 5,
+        "Other": 5
+    }
+    base_severity = severity_map.get(category, 5)
+    
+    try:
+        created_date = datetime.fromisoformat(created_at_iso)
+        age_days = (datetime.utcnow() - created_date).days
+        age_score = min(max(0, age_days), 20)
+    except:
+        age_score = 0
+        
+    support_score = min(support_count, 30)
+    evidence_score = 10 if has_evidence else 0
+    reopen_score = min(reopen_count * 10, 20)
+    
+    total_score = base_severity + age_score + support_score + evidence_score + reopen_score
+    final_score = min(max(total_score, 1), 100)
+    
+    return {
+        "severity": base_severity,
+        "evidence": evidence_score,
+        "support": support_score,
+        "age": age_score,
+        "reopens": reopen_score,
+        "total": final_score
+    }
 
 def get_department_for_category(category):
     dept_map = {
@@ -87,20 +184,28 @@ def get_current_user():
         return {"uid": "mock-user-1", "role": "citizen", "email": "mock@example.com"}
         
     try:
-        decoded_token = auth.verify_id_token(id_token)
+        decoded_token = auth.verify_id_token(id_token, clock_skew_seconds=60)
         uid = decoded_token['uid']
         email = decoded_token.get('email', '')
+        email_verified = decoded_token.get('email_verified', False)
         
         user_ref = db.collection('users').document(uid)
         user_doc = user_ref.get()
         
         if user_doc.exists:
             g.user = user_doc.to_dict()
+            g.user['email_verified'] = email_verified
+            # Ensure UID is in the dict
+            if 'uid' not in g.user:
+                g.user['uid'] = uid
         else:
+            role = "citizen"
+            
             g.user = {
                 "uid": uid,
                 "email": email,
-                "role": "citizen",
+                "email_verified": email_verified,
+                "role": role,
                 "department_id": None
             }
             user_ref.set(g.user)
@@ -142,15 +247,29 @@ def get_me():
 @api.route('/complaints', methods=['POST'])
 @require_roles(['citizen', 'service_worker', 'department_head', 'city_admin', 'main_authority'])
 def create_complaint():
+    user = get_current_user()
+    if not user.get('email_verified', False) and user.get('uid') != 'mock-user-1':
+        return jsonify({"error": "Email verification is required before you can submit a complaint."}), 403
+        
+    if user.get('account_status') == 'banned':
+        return jsonify({"error": "Your account is currently banned from submitting new complaints. Please contact the appropriate authority if you believe this action was made in error."}), 403
+
     data = request.json
     citizen_id = get_current_user_id()
     
     category = data.get('category', 'General')
+    description = data.get('description', '')
+    
+    if contains_profanity(description):
+        return jsonify({"error": "Inappropriate language detected. Please revise your description."}), 400
     
     complaint_data = {
         "citizen_id": citizen_id,
         "category": category,
-        "description": data.get('description', ''),
+        "description": description,
+        "location_state": data.get('location_state', ''),
+        "location_region": data.get('location_region', ''),
+        "location_locality": data.get('location_locality', ''),
         "location_text": data.get('location_text', ''),
         "location_lat": data.get('location_lat'),
         "location_lng": data.get('location_lng'),
@@ -160,9 +279,11 @@ def create_complaint():
         "supporters": [citizen_id],
         "support_count": 1,
         "created_at": datetime.utcnow().isoformat(),
-        "updated_at": datetime.utcnow().isoformat()
+        "updated_at": datetime.utcnow().isoformat(),
+        "history": [add_complaint_history('CREATED', user, None, 'pending_verification', 'Citizen created complaint')]
     }
-    complaint_data["priority_score"] = calculate_priority(category, 1, complaint_data["created_at"])
+    has_evidence = bool(complaint_data.get('image_url'))
+    complaint_data["priority_score"] = calculate_priority(category, 1, complaint_data["created_at"], has_evidence=has_evidence, reopen_count=0)
     
     if db is not None:
         doc_ref = db.collection('complaints').document()
@@ -172,6 +293,74 @@ def create_complaint():
         complaint_data['id'] = "mock-id-123"
         
     return jsonify(complaint_data), 201
+
+@api.route('/complaints/<complaint_id>', methods=['PUT', 'DELETE'])
+@require_roles(['citizen', 'service_worker', 'department_head', 'city_admin', 'main_authority'])
+def modify_complaint(complaint_id):
+    user_id = get_current_user_id()
+    if not user_id or db is None:
+        return jsonify({"error": "Unauthorized or Firestore not configured"}), 401
+        
+    doc_ref = db.collection('complaints').document(complaint_id)
+    doc = doc_ref.get()
+    
+    if not doc.exists:
+        return jsonify({"error": "Complaint not found"}), 404
+        
+    c = doc.to_dict()
+    
+    # Only the creator can modify or delete
+    if c.get('citizen_id') != user_id:
+        return jsonify({"error": "You do not have permission to modify this complaint"}), 403
+        
+    # Block edits/deletes if a worker is assigned or status has progressed
+    if c.get('status') not in ['pending_verification']:
+        return jsonify({"error": "This complaint is already being processed and cannot be modified"}), 400
+        
+    if request.method == 'DELETE':
+        doc_ref.update({
+            'is_deleted': True,
+            'deleted_at': datetime.utcnow().isoformat()
+        })
+        return jsonify({"message": "Complaint deleted successfully"}), 200
+        
+    if request.method == 'PUT':
+        data = request.json
+        description = data.get('description', c.get('description'))
+        
+        if contains_profanity(description):
+            return jsonify({"error": "Inappropriate language detected. Please revise your description."}), 400
+            
+        updates = {
+            "description": description,
+            "location_text": data.get('location_text', c.get('location_text')),
+            "updated_at": datetime.utcnow().isoformat()
+        }
+        
+        # Category change requires recalculating priority and department
+        new_category = data.get('category')
+        if new_category and new_category != c.get('category'):
+            updates['category'] = new_category
+            updates['department'] = get_department_for_category(new_category)
+            updates['priority_score'] = calculate_priority(
+                new_category, 
+                c.get('support_count', 1), 
+                c.get('created_at'), 
+                has_evidence=bool(c.get('image_url')), 
+                reopen_count=c.get('reopen_count', 0)
+            )
+            
+        # Update coordinates if provided
+        if data.get('location_lat') is not None and data.get('location_lng') is not None:
+            updates['location_lat'] = data.get('location_lat')
+            updates['location_lng'] = data.get('location_lng')
+            
+        user = get_current_user()
+        event = add_complaint_history('EDITED', user, c.get('status'), c.get('status'), 'Citizen edited complaint')
+        updates['history'] = firestore.ArrayUnion([event])
+            
+        doc_ref.update(updates)
+        return jsonify({"message": "Complaint updated successfully"}), 200
 
 @api.route('/complaints/check_duplicate', methods=['POST'])
 def check_duplicate():
@@ -194,7 +383,13 @@ def check_duplicate():
     potential_duplicates = []
     for doc in docs:
         c = doc.to_dict()
-        if c.get('status') in ['resolved', 'closed']:
+        if c.get('status') in ['resolved', 'closed'] or c.get('is_deleted', False):
+            continue
+            
+        # Locality match check (Issue 16)
+        req_locality = data.get('location_locality', '').lower().strip()
+        c_locality = c.get('location_locality', '').lower().strip()
+        if req_locality and c_locality and req_locality != c_locality:
             continue
             
         c['id'] = doc.id
@@ -205,6 +400,16 @@ def check_duplicate():
             # Consider it a potential duplicate if within ~2km
             if dist <= 2.0:
                 c['distance_km'] = round(dist, 2)
+                
+                # Basic text similarity check (Jaccard similarity) if description provided
+                desc1 = data.get('description', '').lower().split()
+                desc2 = c.get('description', '').lower().split()
+                if desc1 and desc2:
+                    intersection = set(desc1).intersection(set(desc2))
+                    union = set(desc1).union(set(desc2))
+                    sim = len(intersection) / len(union) if union else 0
+                    c['text_similarity'] = round(sim, 2)
+                
                 potential_duplicates.append(c)
         else:
             # If no coordinates, just return recent ones from same category
@@ -233,11 +438,16 @@ def support_complaint(complaint_id):
     supporters = c.get('supporters', [])
     
     if user_id in supporters:
-        return jsonify({"message": "Already supported", "complaint": c}), 200
+        supporters.remove(user_id)
+        msg = "Support removed"
+    else:
+        supporters.append(user_id)
+        msg = "Support added successfully"
         
-    supporters.append(user_id)
     support_count = len(supporters)
-    new_priority = calculate_priority(c.get('category'), support_count, c.get('created_at'))
+    has_evidence = bool(c.get('image_url'))
+    reopen_count = c.get('reopen_count', 0)
+    new_priority = calculate_priority(c.get('category'), support_count, c.get('created_at'), has_evidence=has_evidence, reopen_count=reopen_count)
     
     doc_ref.update({
         'supporters': supporters,
@@ -251,7 +461,7 @@ def support_complaint(complaint_id):
     c['priority_score'] = new_priority
     c['id'] = complaint_id
     
-    return jsonify({"message": "Support added successfully", "complaint": c}), 200
+    return jsonify({"message": msg, "complaint": c}), 200
 
 @api.route('/complaints', methods=['GET'])
 @require_roles(['main_authority'])
@@ -268,7 +478,10 @@ def list_complaints():
     now = datetime.utcnow()
     for doc in docs:
         c = doc.to_dict()
+        if c.get('is_deleted', False):
+            continue
         c['id'] = doc.id
+        c['priority_breakdown'] = get_priority_breakdown(c)
         
         try:
             created_date = datetime.fromisoformat(c.get('created_at'))
@@ -279,6 +492,50 @@ def list_complaints():
             
         complaints.append(c)
         
+    return jsonify(complaints), 200
+
+@api.route('/complaints/public', methods=['GET'])
+def list_public_complaints():
+    if db is None:
+        return jsonify([]), 200
+        
+    limit = int(request.args.get('limit', 50))
+    
+    # We want ALL public complaints (no support threshold)
+    # Stream all and filter in memory to avoid composite index limits during hackathon.
+    docs = db.collection('complaints').order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit * 2).stream()
+    complaints = []
+    
+    now = datetime.utcnow()
+    for doc in docs:
+        c = doc.to_dict()
+        if c.get('is_deleted', False) or c.get('status') == 'false_report':
+            continue
+            
+        c['id'] = doc.id
+        c['priority_breakdown'] = get_priority_breakdown(c)
+        
+        # Privacy Check: ALWAYS strip PII for public wall
+        c.pop('citizen_id', None)
+        c.pop('citizen_email', None)
+        
+        # Scrub history emails
+        if 'history' in c:
+            for event in c['history']:
+                event.pop('actor_email', None)
+        
+        try:
+            created_date = datetime.fromisoformat(c.get('created_at'))
+            age = (now - created_date).days
+            c['is_overdue'] = age >= 3 and c.get('status') not in ['closed', 'resolved', 'completed']
+        except:
+            c['is_overdue'] = False
+            
+        complaints.append(c)
+        if len(complaints) >= limit:
+            break
+        
+    # No need to sort again since we used order_by
     return jsonify(complaints), 200
 
 @api.route('/complaints/me', methods=['GET'])
@@ -297,7 +554,10 @@ def list_my_complaints():
     complaints = []
     for doc in docs:
         c = doc.to_dict()
+        if c.get('is_deleted', False):
+            continue
         c['id'] = doc.id
+        c['priority_breakdown'] = get_priority_breakdown(c)
         complaints.append(c)
         
     # Sort in memory by created_at DESCENDING
@@ -306,6 +566,7 @@ def list_my_complaints():
     return jsonify(complaints), 200
 
 @api.route('/complaints/<complaint_id>', methods=['GET'])
+@require_roles(['citizen', 'service_worker', 'department_head', 'city_admin', 'main_authority'])
 def get_complaint(complaint_id):
     if db is None:
         return jsonify({"error": "Firestore not configured"}), 500
@@ -313,7 +574,19 @@ def get_complaint(complaint_id):
     doc = db.collection('complaints').document(complaint_id).get()
     if doc.exists:
         complaint = doc.to_dict()
+        if complaint.get('is_deleted', False):
+            return jsonify({"error": "Not found"}), 404
+            
         complaint['id'] = doc.id
+        complaint['priority_breakdown'] = get_priority_breakdown(complaint)
+        
+        # Privacy Check: Strip PII if citizen is not the owner
+        user = get_current_user()
+        if user.get('role') == 'citizen' and complaint.get('citizen_id') != user.get('uid'):
+            # Strip private info but leave community data
+            complaint.pop('citizen_id', None)
+            complaint.pop('citizen_email', None)
+            
         return jsonify(complaint), 200
     return jsonify({"error": "Not found"}), 404
 
@@ -387,6 +660,8 @@ def admin_list_complaints():
     
     for doc in docs:
         c = doc.to_dict()
+        if c.get('is_deleted', False):
+            continue
         if status_filter and c.get('status') != status_filter:
             continue
         c['id'] = doc.id
@@ -403,11 +678,52 @@ def admin_list_complaints():
     complaints.sort(key=lambda x: x.get('created_at', ''), reverse=True)
     return jsonify(complaints), 200
 
-@api.route('/admin/complaints/<complaint_id>/verify', methods=['POST'])
+@api.route('/admin/complaints/deleted', methods=['GET'])
 @require_roles(['city_admin', 'main_authority'])
+def admin_list_deleted_complaints():
+    user = get_current_user()
+    if not user or db is None:
+        return jsonify({"error": "Unauthorized or no DB"}), 401
+        
+    # We can't efficiently where() for is_deleted across a huge dataset without an index,
+    # but for hackathon scale, streaming and filtering is acceptable.
+    docs = db.collection('complaints').stream()
+    complaints = []
+    
+    for doc in docs:
+        c = doc.to_dict()
+        if c.get('is_deleted', False):
+            c['id'] = doc.id
+            complaints.append(c)
+            
+    complaints.sort(key=lambda x: x.get('deleted_at', x.get('created_at', '')), reverse=True)
+    return jsonify(complaints), 200
+
+@api.route('/admin/complaints/<complaint_id>/restore', methods=['POST'])
+@require_roles(['city_admin', 'main_authority'])
+def restore_deleted_complaint(complaint_id):
+    if db is None:
+        return jsonify({"error": "Firestore not configured"}), 500
+        
+    doc_ref = db.collection('complaints').document(complaint_id)
+    doc = doc_ref.get()
+    
+    if not doc.exists:
+        return jsonify({"error": "Complaint not found"}), 404
+        
+    doc_ref.update({
+        'is_deleted': False,
+        'deleted_at': firestore.DELETE_FIELD,
+        'updated_at': datetime.utcnow().isoformat()
+    })
+    
+    return jsonify({"message": "Complaint restored successfully"}), 200
+
+@api.route('/admin/complaints/<complaint_id>/verify', methods=['POST'])
+@require_roles(['city_admin', 'main_authority', 'department_head'])
 def admin_verify_complaint(complaint_id):
-    user_id = get_current_user_id()
-    if not user_id:
+    user = get_current_user()
+    if not user:
         return jsonify({"error": "Unauthorized"}), 401
         
     if db is None:
@@ -420,19 +736,69 @@ def admin_verify_complaint(complaint_id):
         return jsonify({"error": "Not found"}), 404
         
     c = doc.to_dict()
+    
+    # Strict Scoping Check
+    if user.get('role') == 'department_head':
+        if not user.get('department_id') or c.get('department') != user.get('department_id'):
+            return jsonify({"error": "Forbidden: Department mismatch"}), 403
+            
     if c.get('status') != 'pending_verification':
         return jsonify({"error": "Complaint is not pending verification"}), 400
+        
+    event = add_complaint_history('VERIFIED', user, c.get('status'), 'verified')
         
     doc_ref.update({
         'status': 'verified',
         'updated_at': datetime.utcnow().isoformat(),
-        'verified_by': user_id
+        'verified_by': user.get('uid'),
+        'history': firestore.ArrayUnion([event])
     })
     
     c['status'] = 'verified'
     c['id'] = complaint_id
     
     return jsonify({"message": "Verified successfully", "complaint": c}), 200
+
+@api.route('/admin/complaints/<complaint_id>/reject', methods=['POST'])
+@require_roles(['city_admin', 'main_authority', 'department_head'])
+def admin_reject_complaint_flow(complaint_id):
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+        
+    data = request.json or {}
+    reason = data.get('reason', 'No reason provided')
+        
+    if db is None:
+        return jsonify({"error": "Firestore not configured"}), 500
+        
+    doc_ref = db.collection('complaints').document(complaint_id)
+    doc = doc_ref.get()
+    
+    if not doc.exists:
+        return jsonify({"error": "Not found"}), 404
+        
+    c = doc.to_dict()
+    
+    # Strict Scoping Check
+    if user.get('role') == 'department_head':
+        if not user.get('department_id') or c.get('department') != user.get('department_id'):
+            return jsonify({"error": "Forbidden: Department mismatch"}), 403
+            
+    if c.get('status') != 'pending_verification':
+        return jsonify({"error": "Complaint is not pending verification"}), 400
+        
+    event = add_complaint_history('REJECTED', user, c.get('status'), 'rejected', f"Reason: {reason}")
+        
+    doc_ref.update({
+        'status': 'rejected',
+        'updated_at': datetime.utcnow().isoformat(),
+        'rejected_by': user.get('uid'),
+        'rejection_reason': reason,
+        'history': firestore.ArrayUnion([event])
+    })
+    
+    return jsonify({"message": "Complaint rejected successfully"}), 200
 
 @api.route('/admin/stats', methods=['GET'])
 @require_roles(['city_admin', 'main_authority'])
@@ -443,16 +809,23 @@ def admin_stats():
         return jsonify({"total": 0, "pending": 0, "resolved": 0}), 200
         
     try:
-        # Efficient count() queries (cost 1 read per query in Firestore)
-        total_query = db.collection('complaints').count()
-        total = total_query.get()[0][0].value
+        # Instead of count() queries which can't easily filter out missing fields, 
+        # we'll stream and count in memory to accurately exclude soft-deleted items.
+        docs = db.collection('complaints').stream()
+        total = 0
+        pending = 0
+        resolved = 0
         
-        pending_query = db.collection('complaints').where('status', '==', 'pending_verification').count()
-        pending = pending_query.get()[0][0].value
-        
-        resolved_query = db.collection('complaints').where('status', 'in', ['resolved', 'closed']).count()
-        resolved = resolved_query.get()[0][0].value
-        
+        for doc in docs:
+            c = doc.to_dict()
+            if c.get('is_deleted', False):
+                continue
+            total += 1
+            if c.get('status') == 'pending_verification':
+                pending += 1
+            elif c.get('status') in ['resolved', 'closed']:
+                resolved += 1
+                
         return jsonify({
             "total": total,
             "pending": pending,
@@ -482,21 +855,43 @@ def admin_assign_complaint(complaint_id):
         return jsonify({"error": "Not found"}), 404
         
     c = doc.to_dict()
-    if user.get('role') == 'department_head' and c.get('department') != user.get('department_id'):
-        return jsonify({"error": "Forbidden: Complaint is not in your department"}), 403
+    
+    force = data.get('force', False)
+    
+    if worker_id in c.get('rejected_workers', []):
+        return jsonify({"error": f"Worker {worker_id} previously submitted rejected work for this complaint and cannot be reassigned."}), 400
+    
+    if not force:
+        # Check worker load
+        worker_docs = db.collection('complaints').where('worker_id', '==', worker_id).stream()
+        active_tasks = sum(1 for w_doc in worker_docs if w_doc.to_dict().get('status') in ['assigned', 'completed'])
         
-    if c.get('status') != 'verified':
-        return jsonify({"error": "Complaint must be verified before assignment"}), 400
+        if active_tasks >= 3:
+            return jsonify({
+                "warning": True,
+                "message": f"Worker {worker_id} already has {active_tasks} active tasks. Proceed with assignment anyway?"
+            }), 200
+    
+    # Strict Scoping Check
+    if user.get('role') == 'department_head':
+        if not user.get('department_id') or c.get('department') != user.get('department_id'):
+            return jsonify({"error": "Forbidden: Department mismatch"}), 403
+            
+    if c.get('status') not in ['verified', 'reopened']:
+        return jsonify({"error": "Complaint must be verified or reopened before assignment"}), 400
+        
+    action = 'REASSIGNED' if c.get('worker_id') else 'ASSIGNED'
+    event = add_complaint_history(action, user, c.get('status'), 'assigned', f"Assigned to {worker_id}", worker_uid=worker_id)
         
     doc_ref.update({
         'status': 'assigned',
         'worker_id': worker_id,
         'assigned_at': datetime.utcnow().isoformat(),
-        'updated_at': datetime.utcnow().isoformat()
+        'assigned_by': user.get('uid'),
+        'history': firestore.ArrayUnion([event])
     })
-    c['status'] = 'assigned'
     
-    return jsonify({"message": "Assigned successfully"}), 200
+    return jsonify({"message": "Complaint assigned successfully"}), 200
 
 @api.route('/worker/complaints', methods=['GET'])
 @require_roles(['service_worker'])
@@ -547,14 +942,69 @@ def worker_upload_proof(complaint_id):
     if c.get('status') != 'assigned':
         return jsonify({"error": "Complaint must be assigned before providing proof"}), 400
         
+    event = add_complaint_history('WORK_COMPLETED', user, c.get('status'), 'completed', 'Worker uploaded proof', worker_uid=user['uid'])
+    
     doc_ref.update({
         'status': 'completed',
         'proof_image_url': proof_url,
         'completed_at': datetime.utcnow().isoformat(),
-        'updated_at': datetime.utcnow().isoformat()
+        'updated_at': datetime.utcnow().isoformat(),
+        'history': firestore.ArrayUnion([event])
     })
     
     return jsonify({"message": "Proof uploaded successfully"}), 200
+
+@api.route('/worker/complaints/<complaint_id>/false_report', methods=['POST'])
+@require_roles(['service_worker'])
+def worker_false_report(complaint_id):
+    user = get_current_user()
+    data = request.json or {}
+    reason = data.get('reason')
+    
+    if not reason:
+        return jsonify({"error": "Reason is required for marking a false report"}), 400
+        
+    if db is None:
+        return jsonify({"error": "Firestore not configured"}), 500
+        
+    doc_ref = db.collection('complaints').document(complaint_id)
+    doc = doc_ref.get()
+    
+    if not doc.exists:
+        return jsonify({"error": "Not found"}), 404
+        
+    c = doc.to_dict()
+    
+    # Strict Worker Scoping Check
+    if c.get('worker_id') not in [user['uid'], user.get('email')]:
+        return jsonify({"error": "Forbidden: This task is not assigned to you"}), 403
+        
+    if c.get('status') != 'assigned':
+        return jsonify({"error": "Complaint must be assigned before marking as false report"}), 400
+        
+    citizen_id = c.get('citizen_id')
+    
+    event = add_complaint_history('FALSE_REPORT', user, c.get('status'), 'false_report', f"Reason: {reason}", worker_uid=user['uid'])
+    
+    # Update Complaint Status
+    doc_ref.update({
+        'status': 'false_report',
+        'false_report_reason': reason,
+        'false_report_by': user['uid'],
+        'false_reported_at': datetime.utcnow().isoformat(),
+        'updated_at': datetime.utcnow().isoformat(),
+        'history': firestore.ArrayUnion([event])
+    })
+    
+    # Increment Citizen false_report_count
+    if citizen_id:
+        citizen_ref = db.collection('users').document(citizen_id)
+        # Using a transaction or increment is safest, but we can use firestore.Increment(1)
+        citizen_ref.update({
+            'false_report_count': firestore.Increment(1)
+        })
+        
+    return jsonify({"message": "False report marked successfully"}), 200
 
 @api.route('/complaints/<complaint_id>/confirm', methods=['POST'])
 def citizen_confirm_complaint(complaint_id):
@@ -578,10 +1028,14 @@ def citizen_confirm_complaint(complaint_id):
     if c.get('status') != 'completed':
         return jsonify({"error": "Complaint is not completed"}), 400
         
+    user = get_current_user()
+    event = add_complaint_history('CITIZEN_CONFIRMED', user, c.get('status'), 'closed', 'Citizen confirmed work', worker_uid=c.get('worker_id'))
+    
     doc_ref.update({
         'status': 'closed',
         'closed_at': datetime.utcnow().isoformat(),
-        'updated_at': datetime.utcnow().isoformat()
+        'updated_at': datetime.utcnow().isoformat(),
+        'history': firestore.ArrayUnion([event])
     })
     
     return jsonify({"message": "Confirmed and closed successfully"}), 200
@@ -608,11 +1062,44 @@ def citizen_reject_complaint(complaint_id):
     if c.get('status') != 'completed':
         return jsonify({"error": "Complaint is not completed"}), 400
         
-    doc_ref.update({
-        'status': 'reopened',
-        'reopened_at': datetime.utcnow().isoformat(),
-        'updated_at': datetime.utcnow().isoformat()
-    })
+    previous_proofs = c.get('previous_proofs', [])
+    if c.get('proof_image_url'):
+        previous_proofs.append({
+            'url': c.get('proof_image_url'),
+            'worker_id': c.get('worker_id'),
+            'completed_at': c.get('completed_at'),
+            'rejected_at': datetime.utcnow().isoformat()
+        })
+        
+    reopen_count = c.get('reopen_count', 0) + 1
+    user = get_current_user()
+    
+    updates = {
+        'previous_proofs': previous_proofs,
+        'proof_image_url': firestore.DELETE_FIELD,
+        'updated_at': datetime.utcnow().isoformat(),
+        'reopen_count': reopen_count
+    }
+    
+    if c.get('worker_id'):
+        updates['rejected_workers'] = firestore.ArrayUnion([c.get('worker_id')])
+        
+    events = [
+        add_complaint_history('PROOF_REJECTED', user, 'completed', 'completed', 'Citizen rejected proof', c.get('worker_id'))
+    ]
+    
+    if reopen_count >= 3:
+        updates['status'] = 'escalated'
+        updates['escalated_at'] = datetime.utcnow().isoformat()
+        events.append(add_complaint_history('ESCALATED', user, 'completed', 'escalated', '3rd reopen limit reached'))
+    else:
+        updates['status'] = 'reopened'
+        updates['reopened_at'] = datetime.utcnow().isoformat()
+        events.append(add_complaint_history('REOPENED', user, 'completed', 'reopened'))
+        
+    updates['history'] = firestore.ArrayUnion(events)
+        
+    doc_ref.update(updates)
     
     return jsonify({"message": "Complaint reopened successfully"}), 200
 
@@ -654,3 +1141,208 @@ def upload_image():
         return jsonify({"url": upload_result.get("secure_url")}), 200
     except Exception as e:
         return jsonify({"error": f"Failed to upload image: {str(e)}"}), 500
+
+@api.route('/users', methods=['GET'])
+@require_roles(['main_authority', 'city_admin'])
+def list_users():
+    if db is None:
+        return jsonify([]), 200
+        
+    users_ref = db.collection('users').stream()
+    users = []
+    for doc in users_ref:
+        u = doc.to_dict()
+        u['id'] = doc.id
+        # Ensure default values are returned for the frontend UI
+        if 'account_status' not in u:
+            u['account_status'] = 'active'
+        if 'false_report_count' not in u:
+            u['false_report_count'] = 0
+        users.append(u)
+        
+    return jsonify(users), 200
+
+@api.route('/admin/workers/<target_uid>/performance', methods=['GET'])
+@require_roles(['main_authority', 'city_admin', 'department_head'])
+def get_worker_performance(target_uid):
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Unauthorized"}), 401
+        
+    if db is None:
+        return jsonify({"error": "Firestore not configured"}), 500
+        
+    # Department heads can only see performance of their own department's workers
+    if user.get('role') == 'department_head':
+        worker_doc = db.collection('users').document(target_uid).get()
+        if not worker_doc.exists or worker_doc.to_dict().get('department_id') != user.get('department_id'):
+            return jsonify({"error": "Forbidden: Cannot view workers from other departments"}), 403
+
+    complaints_ref = db.collection('complaints').where('worker_id', '==', target_uid).stream()
+    
+    total_assigned = 0
+    successfully_completed = 0
+    citizen_confirmed = 0
+    reopened = 0
+    
+    for doc in complaints_ref:
+        c = doc.to_dict()
+        total_assigned += 1
+        
+        if c.get('status') in ['completed', 'resolved', 'closed']:
+            successfully_completed += 1
+            
+        if c.get('status') in ['resolved', 'closed']:
+            citizen_confirmed += 1
+            
+        history = c.get('history', [])
+        for event in history:
+            if event.get('action') == 'PROOF_REJECTED' and event.get('worker_uid') == target_uid:
+                reopened += 1
+                
+    return jsonify({
+        "total_assigned": total_assigned,
+        "successfully_completed": successfully_completed,
+        "citizen_confirmed": citizen_confirmed,
+        "reopened_from_rejection": reopened
+    }), 200
+
+@api.route('/admin/users/<target_uid>/ban', methods=['POST'])
+@require_roles(['main_authority', 'city_admin'])
+def ban_user(target_uid):
+    admin_user = get_current_user()
+    
+    if target_uid == admin_user['uid']:
+        return jsonify({"error": "You cannot ban yourself"}), 400
+        
+    if db is None:
+        return jsonify({"error": "Firestore not configured"}), 500
+        
+    target_ref = db.collection('users').document(target_uid)
+    target_doc = target_ref.get()
+    
+    if not target_doc.exists:
+        return jsonify({"error": "Target user not found"}), 404
+        
+    target_data = target_doc.to_dict()
+    target_role = target_data.get('role', 'citizen')
+    
+    # Hierarchy check
+    if target_role == 'main_authority':
+        return jsonify({"error": "Forbidden: Cannot ban a Main Authority"}), 403
+    if admin_user.get('role') == 'city_admin' and target_role in ['main_authority', 'city_admin']:
+        return jsonify({"error": "Forbidden: Cannot ban peers or superiors"}), 403
+        
+    target_ref.update({'account_status': 'banned'})
+    
+    # Audit History
+    db.collection('admin_actions').add({
+        'action': 'BAN',
+        'target_uid': target_uid,
+        'target_email': target_data.get('email'),
+        'admin_uid': admin_user['uid'],
+        'admin_role': admin_user.get('role'),
+        'timestamp': datetime.utcnow().isoformat()
+    })
+    
+    return jsonify({"message": "User banned successfully"}), 200
+
+@api.route('/admin/users/<target_uid>/unban', methods=['POST'])
+@require_roles(['main_authority', 'city_admin'])
+def unban_user(target_uid):
+    admin_user = get_current_user()
+    
+    if db is None:
+        return jsonify({"error": "Firestore not configured"}), 500
+        
+    target_ref = db.collection('users').document(target_uid)
+    target_doc = target_ref.get()
+    
+    if not target_doc.exists:
+        return jsonify({"error": "Target user not found"}), 404
+        
+    target_data = target_doc.to_dict()
+    
+    target_ref.update({'account_status': 'active'})
+    
+    # Audit History
+    db.collection('admin_actions').add({
+        'action': 'UNBAN',
+        'target_uid': target_uid,
+        'target_email': target_data.get('email'),
+        'admin_uid': admin_user['uid'],
+        'admin_role': admin_user.get('role'),
+        'timestamp': datetime.utcnow().isoformat()
+    })
+    
+    return jsonify({"message": "User unbanned successfully"}), 200
+
+@api.route('/users/<target_uid>/role', methods=['POST'])
+@require_roles(['main_authority', 'city_admin'])
+def update_user_role(target_uid):
+    data = request.json
+    new_role = data.get('role')
+    new_dept = data.get('department_id')
+    
+    current_user = get_current_user()
+    current_uid = current_user.get('uid')
+    current_role = current_user.get('role')
+    
+    if not new_role:
+        return jsonify({"error": "Role is required"}), 400
+        
+    valid_roles = ['main_authority', 'city_admin', 'department_head', 'service_worker', 'citizen']
+    if new_role not in valid_roles:
+        return jsonify({"error": "Invalid role"}), 400
+        
+    if current_uid == target_uid:
+        return jsonify({"error": "You cannot modify your own role"}), 403
+        
+    if db is None:
+        return jsonify({"error": "Firestore not configured"}), 500
+        
+    # City Admins cannot grant or manage main_authority
+    if current_role == 'city_admin' and new_role == 'main_authority':
+        return jsonify({"error": "City Admin cannot grant Main Authority"}), 403
+        
+    target_ref = db.collection('users').document(target_uid)
+    target_doc = target_ref.get()
+    
+    if not target_doc.exists:
+        return jsonify({"error": "User not found"}), 404
+        
+    target_data = target_doc.to_dict()
+    
+    # City Admin cannot modify an existing Main Authority
+    if current_role == 'city_admin' and target_data.get('role') == 'main_authority':
+        return jsonify({"error": "City Admin cannot modify a Main Authority"}), 403
+        
+    # Prevent removing the last Main Authority
+    if target_data.get('role') == 'main_authority' and new_role != 'main_authority':
+        ma_count = len(list(db.collection('users').where('role', '==', 'main_authority').stream()))
+        if ma_count <= 1:
+            return jsonify({"error": "Cannot demote the last remaining Main Authority"}), 400
+            
+    # Department validation
+    if new_role in ['department_head', 'service_worker'] and not new_dept:
+        return jsonify({"error": f"department_id is required for {new_role}"}), 400
+    if new_role == 'citizen':
+        new_dept = None
+        
+    target_ref.update({
+        'role': new_role,
+        'department_id': new_dept
+    })
+    
+    # Audit log
+    db.collection('admin_actions').add({
+        "action": "role_changed",
+        "admin_uid": current_uid,
+        "target_uid": target_uid,
+        "old_role": target_data.get('role'),
+        "new_role": new_role,
+        "department_id": new_dept,
+        "timestamp": datetime.utcnow().isoformat()
+    })
+    
+    return jsonify({"message": "User role updated successfully"}), 200

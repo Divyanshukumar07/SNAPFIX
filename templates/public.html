@@ -1,0 +1,342 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="dashboard-header" style="margin-bottom: 1rem;">
+    <h2>Public Civic Complaints Board</h2>
+    <p>View civic issues raised by the community. Support existing issues to raise their priority.</p>
+</div>
+
+<!-- Tabs -->
+<div style="display: flex; gap: 1rem; border-bottom: 2px solid var(--border-color); margin-bottom: 1rem;">
+    <button id="tab-complaints" class="btn btn-secondary" style="border: none; border-radius: 0; border-bottom: 3px solid transparent;" onclick="setTab('complaints')">COMPLAINTS</button>
+    <button id="tab-inprogress" class="btn btn-secondary" style="border: none; border-radius: 0; border-bottom: 3px solid transparent;" onclick="setTab('inprogress')">IN PROGRESS</button>
+    <button id="tab-completed" class="btn btn-secondary" style="border: none; border-radius: 0; border-bottom: 3px solid transparent;" onclick="setTab('completed')">COMPLETED</button>
+</div>
+
+<!-- Search & Filters -->
+<div class="card" style="padding: 1rem; margin-bottom: 1.5rem; background: #f8fafc; border: 1px dashed var(--border-color);">
+    <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+        <input type="text" id="search-input" placeholder="Search complaints..." style="flex: 1; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px;">
+    </div>
+    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+        <select id="filter-category" style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; flex: 1;">
+            <option value="">Category ▼</option>
+            <option value="Garbage/Waste">Garbage/Waste</option>
+            <option value="Streetlight/Electrical">Streetlight/Electrical</option>
+            <option value="Roads">Roads & Potholes</option>
+            <option value="Water/Sewage">Water/Sewage</option>
+            <option value="Other">Other</option>
+        </select>
+        <select id="filter-state" style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; flex: 1;">
+            <option value="">State ▼</option>
+            <option value="Goa">Goa</option>
+            <option value="Maharashtra">Maharashtra</option>
+            <option value="Karnataka">Karnataka</option>
+        </select>
+        <select id="filter-region" style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; flex: 1;">
+            <option value="">Region ▼</option>
+            <option value="North Goa">North Goa</option>
+            <option value="South Goa">South Goa</option>
+            <option value="Mumbai">Mumbai</option>
+        </select>
+        <input type="text" id="filter-locality" placeholder="Locality ▼" style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; flex: 1;">
+        <button class="btn btn-secondary btn-sm" onclick="clearFilters()">Clear Filters</button>
+    </div>
+</div>
+
+<div class="card mt-2" style="border: none; box-shadow: none; padding: 0;">
+    <div id="public-complaints-list" class="complaints-grid" style="display: grid; gap: 1rem;">
+        <p class="text-muted">Loading public issues...</p>
+    </div>
+</div>
+
+<!-- Details Modal -->
+<div id="details-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+    <div class="card" style="width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto; position: relative;">
+        <button onclick="closeDetails()" style="position: absolute; top: 1rem; right: 1rem; background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+        <h3 id="modal-category" style="margin-bottom: 0.5rem;">Category</h3>
+        <p><span id="modal-status" style="background: #e2e8f0; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.85rem; font-weight: bold;">STATUS</span></p>
+        
+        <div style="margin: 1rem 0; padding: 1rem; background: #f8fafc; border-radius: 8px;">
+            <p><strong>Description:</strong></p>
+            <p id="modal-description" style="margin-top: 0.5rem;"></p>
+        </div>
+        
+        <p class="text-muted" style="margin-bottom: 0.5rem;">📍 <span id="modal-location"></span></p>
+        <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 1rem;">Reported on: <span id="modal-date"></span></p>
+        
+        <div id="modal-image-container" style="display: none; margin-bottom: 1rem;">
+            <p><strong>Evidence:</strong></p>
+            <img id="modal-image" src="" style="max-width: 100%; border-radius: 8px; border: 1px solid var(--border-color);">
+        </div>
+        
+        <div id="modal-timeline" style="margin-bottom: 1rem; display: none;">
+            <details style="border-top: 1px dashed #cbd5e1; padding-top: 1rem;">
+                <summary style="cursor: pointer; font-weight: bold; color: #475569;">Activity Timeline</summary>
+                <div id="modal-timeline-content" style="margin-top: 0.5rem; padding-left: 1rem; border-left: 2px solid #e2e8f0;">
+                </div>
+            </details>
+        </div>
+        
+        <div style="display: flex; gap: 1rem; align-items: center; margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+            <span style="font-weight: bold;">👍 <span id="modal-support-count">0</span> Supporters</span>
+            <button id="modal-support-btn" class="btn btn-primary" onclick="supportCurrentComplaint()">Support</button>
+        </div>
+    </div>
+</div>
+
+<script>
+let allComplaints = [];
+let currentTab = 'complaints';
+let currentComplaintId = null;
+
+document.addEventListener('DOMContentLoaded', async () => {
+    // Wait for auth initialization
+    setTimeout(() => {
+        setTab('complaints');
+        fetchComplaints();
+        setupSearchListeners();
+    }, 500);
+});
+
+function setupSearchListeners() {
+    document.getElementById('search-input').addEventListener('input', renderComplaints);
+    document.getElementById('filter-category').addEventListener('change', renderComplaints);
+    document.getElementById('filter-state').addEventListener('change', renderComplaints);
+    document.getElementById('filter-region').addEventListener('change', renderComplaints);
+    document.getElementById('filter-locality').addEventListener('input', renderComplaints);
+}
+
+function clearFilters() {
+    document.getElementById('search-input').value = '';
+    document.getElementById('filter-category').value = '';
+    document.getElementById('filter-state').value = '';
+    document.getElementById('filter-region').value = '';
+    document.getElementById('filter-locality').value = '';
+    renderComplaints();
+}
+
+function setTab(tabId) {
+    currentTab = tabId;
+    ['complaints', 'inprogress', 'completed'].forEach(id => {
+        const btn = document.getElementById('tab-' + id);
+        if (id === tabId) {
+            btn.style.borderBottomColor = 'var(--primary-color)';
+            btn.style.color = 'var(--primary-color)';
+            btn.style.fontWeight = 'bold';
+        } else {
+            btn.style.borderBottomColor = 'transparent';
+            btn.style.color = 'var(--text-color)';
+            btn.style.fontWeight = 'normal';
+        }
+    });
+    renderComplaints();
+}
+
+async function fetchComplaints() {
+    const listEl = document.getElementById('public-complaints-list');
+    try {
+        const response = await fetch('/api/complaints/public?limit=100');
+        if (!response.ok) throw new Error("Failed to load public complaints");
+        
+        allComplaints = await response.json();
+        renderComplaints();
+    } catch (error) {
+        listEl.innerHTML = '<p class="text-danger">Failed to load issues.</p>';
+        console.error(error);
+    }
+}
+
+function getTabForStatus(status) {
+    if (['pending_verification'].includes(status)) return 'complaints';
+    if (['verified', 'assigned', 'in_progress', 'reopened', 'escalated'].includes(status)) return 'inprogress';
+    if (['completed', 'closed', 'resolved'].includes(status)) return 'completed';
+    return 'none';
+}
+
+function renderComplaints() {
+    const listEl = document.getElementById('public-complaints-list');
+    
+    // Filters
+    const search = document.getElementById('search-input').value.toLowerCase();
+    const cat = document.getElementById('filter-category').value;
+    const state = document.getElementById('filter-state').value;
+    const region = document.getElementById('filter-region').value;
+    const loc = document.getElementById('filter-locality').value.toLowerCase();
+    
+    const filtered = allComplaints.filter(c => {
+        // Tab Check
+        if (getTabForStatus(c.status) !== currentTab) return false;
+        
+        // Search Check
+        if (search) {
+            const text = ((c.category || '') + ' ' + (c.description || '') + ' ' + (c.location_text || '') + ' ' + (c.location_locality || '')).toLowerCase();
+            if (!text.includes(search)) return false;
+        }
+        
+        // Filter Check
+        if (cat && c.category !== cat) return false;
+        if (state && c.location_state !== state) return false;
+        if (region && c.location_region !== region) return false;
+        if (loc && !(c.location_locality || '').toLowerCase().includes(loc)) return false;
+        
+        return true;
+    });
+    
+    if (filtered.length === 0) {
+        listEl.innerHTML = '<p class="text-muted" style="padding: 2rem;">No complaints match the current filters in this tab.</p>';
+        return;
+    }
+    
+    let html = '';
+    filtered.forEach(c => {
+        const date = new Date(c.created_at).toLocaleDateString();
+        
+        html += `
+            <div class="card" style="padding: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius); background: #fff;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                    <span style="font-weight: bold; color: var(--primary-color)">${c.category}</span>
+                    <span style="background: #e2e8f0; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.85rem; font-weight: bold;">${c.status.toUpperCase().replace('_', ' ')}</span>
+                </div>
+                <h4 style="margin-bottom: 0.5rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${c.description || 'No description'}</h4>
+                <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 0.5rem;">📍 ${(c.location_locality ? c.location_locality + ', ' : '')}${c.location_text || ''}</p>
+                
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; border-top: 1px solid #f1f5f9; padding-top: 0.5rem;">
+                    <span style="font-size: 0.9rem; font-weight: bold; color: #d97706;">👍 ${c.support_count} Supporters</span>
+                    <button class="btn btn-secondary btn-sm" onclick="openDetails('${c.id}')">View Details</button>
+                </div>
+            </div>
+        `;
+    });
+    
+    listEl.innerHTML = html;
+}
+
+function openDetails(id) {
+    const c = allComplaints.find(x => x.id === id);
+    if (!c) return;
+    currentComplaintId = id;
+    
+    document.getElementById('modal-category').innerText = c.category;
+    document.getElementById('modal-status').innerText = c.status.toUpperCase().replace('_', ' ');
+    document.getElementById('modal-description').innerText = c.description;
+    
+    let locParts = [];
+    if (c.location_locality) locParts.push(c.location_locality);
+    if (c.location_region) locParts.push(c.location_region);
+    if (c.location_state) locParts.push(c.location_state);
+    
+    let fullLoc = c.location_text || '';
+    if (locParts.length > 0) fullLoc = locParts.join(', ') + ' - ' + fullLoc;
+    
+    document.getElementById('modal-location').innerText = fullLoc;
+    document.getElementById('modal-date').innerText = new Date(c.created_at).toLocaleString();
+    
+    if (c.image_url) {
+        document.getElementById('modal-image').src = c.image_url;
+        document.getElementById('modal-image-container').style.display = 'block';
+    } else {
+        document.getElementById('modal-image-container').style.display = 'none';
+    }
+    
+    document.getElementById('modal-support-count').innerText = c.support_count;
+    
+    const timelineEl = document.getElementById('modal-timeline');
+    const timelineContentEl = document.getElementById('modal-timeline-content');
+    if (c.history && c.history.length > 0) {
+        timelineContentEl.innerHTML = c.history.map(h => `
+            <div style="margin-bottom: 0.8rem; position: relative;">
+                <div style="position: absolute; left: -1.4rem; top: 0.2rem; width: 0.6rem; height: 0.6rem; background: var(--primary-color); border-radius: 50%;"></div>
+                <div style="font-size: 0.8rem; color: #64748b;">${new Date(h.timestamp).toLocaleString()}</div>
+                <div style="font-weight: bold; font-size: 0.9rem;">${h.action.replace('_', ' ')}</div>
+                <div style="font-size: 0.85rem;">By: ${h.actor_role.replace('_', ' ')}</div>
+                ${h.details ? `<div style="font-size: 0.85rem; color: #475569; margin-top: 2px;"><i>${h.details}</i></div>` : ''}
+            </div>
+        `).join('');
+        timelineEl.style.display = 'block';
+    } else {
+        timelineEl.style.display = 'none';
+    }
+    
+    const btn = document.getElementById('modal-support-btn');
+    const user = firebase.auth().currentUser;
+    
+    if (user && c.supporters && c.supporters.includes(user.uid)) {
+        btn.innerText = 'Supported ✓';
+        btn.style.background = '#10b981';
+        btn.style.borderColor = '#10b981';
+    } else {
+        btn.innerText = 'Support';
+        btn.style.background = 'var(--primary-color)';
+        btn.style.borderColor = 'var(--primary-color)';
+    }
+    
+    document.getElementById('details-modal').style.display = 'flex';
+}
+
+function closeDetails() {
+    document.getElementById('details-modal').style.display = 'none';
+}
+
+async function supportCurrentComplaint() {
+    if (!currentComplaintId) return;
+    const user = firebase.auth().currentUser;
+    if (!user) {
+        alert("Please log in to support complaints.");
+        window.location.href = '/login?next=/public';
+        return;
+    }
+    
+    const btn = document.getElementById('modal-support-btn');
+    btn.disabled = true;
+    btn.innerText = 'Supporting...';
+    
+    try {
+        const token = await user.getIdToken();
+        const res = await fetch(`/api/complaints/${currentComplaintId}/support`, {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        
+        const data = await res.json();
+        
+        if (!res.ok) {
+            throw new Error(data.error || "Failed to toggle support");
+        }
+        
+        // Update local state with the returned complaint data
+        const c = allComplaints.find(x => x.id === currentComplaintId);
+        if (c && data.complaint) {
+            c.support_count = data.complaint.support_count;
+            c.supporters = data.complaint.supporters || [];
+            
+            document.getElementById('modal-support-count').innerText = c.support_count;
+            
+            if (c.supporters.includes(user.uid)) {
+                btn.innerText = 'Supported ✓';
+                btn.style.background = '#10b981';
+                btn.style.borderColor = '#10b981';
+            } else {
+                btn.innerText = 'Support';
+                btn.style.background = 'var(--primary-color)';
+                btn.style.borderColor = 'var(--primary-color)';
+            }
+            
+            renderComplaints();
+        }
+        
+    } catch(err) {
+        alert(err.message);
+        // Reset visually on error
+        const c = allComplaints.find(x => x.id === currentComplaintId);
+        if (c && c.supporters && c.supporters.includes(user.uid)) {
+            btn.innerText = 'Supported ✓';
+        } else {
+            btn.innerText = 'Support';
+        }
+    } finally {
+        btn.disabled = false;
+    }
+}
+</script>
+{% endblock %}
