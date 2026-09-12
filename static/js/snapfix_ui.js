@@ -99,6 +99,7 @@ window.SnapFixModal = {
             const inputContainer = document.getElementById('snapfix-modal-input-container');
             const inputEl = document.getElementById('snapfix-modal-input');
             inputContainer.style.display = 'none';
+            inputEl.style.display = 'none';
             inputEl.value = '';
             
             const confirmBtn = document.getElementById('snapfix-modal-confirm');

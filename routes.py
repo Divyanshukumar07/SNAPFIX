@@ -926,10 +926,18 @@ def admin_assign_complaint(complaint_id):
     c = doc.to_dict()
     
     worker_doc = db.collection('users').document(worker_id).get()
-    if worker_doc.exists:
-        w_data = worker_doc.to_dict()
-        if w_data.get('worker_status') == 'OFFLINE':
-            return jsonify({"error": "Worker is currently OFFLINE and cannot receive new assignments."}), 400
+    if not worker_doc.exists:
+        users_query = db.collection('users').where('email', '==', worker_id).limit(1).stream()
+        for u in users_query:
+            worker_id = u.id
+            worker_doc = db.collection('users').document(worker_id).get()
+            
+    if not worker_doc.exists:
+        return jsonify({"error": "Worker not found. Please verify the UID or email."}), 404
+        
+    w_data = worker_doc.to_dict()
+    if w_data.get('worker_status') == 'OFFLINE':
+        return jsonify({"error": "Worker is currently OFFLINE and cannot receive new assignments."}), 400
             
     force = data.get('force', False)
     deadline = data.get('expected_completion_deadline')
@@ -1022,7 +1030,7 @@ def handle_assignment(complaint_id):
         return jsonify({"error": "Complaint not found"}), 404
         
     c = doc.to_dict()
-    if c.get('worker_id') != user['uid']:
+    if user['uid'] != c.get('worker_id') and user['uid'] not in c.get('assigned_workers', []):
         return jsonify({"error": "Not assigned to this worker"}), 400
         
     if action == 'accept':
@@ -1047,14 +1055,28 @@ def handle_assignment(complaint_id):
         # Reject
         if c.get('assignment_state') != 'pending':
             return jsonify({"error": "Only pending assignments can be rejected"}), 400
+            
+        assigned_workers = c.get('assigned_workers', [])
+        if user['uid'] in assigned_workers:
+            assigned_workers.remove(user['uid'])
+            
         prev_status = c.get('pre_assignment_status', 'verified')
-        event = add_complaint_history('ASSIGNMENT_REJECTED', user, 'assigned', prev_status, f"Reason: {reason}", worker_uid=user['uid'])
-        doc_ref.update({
-            'worker_id': None,
-            'assignment_state': 'rejected',
-            'status': prev_status,
+        new_status = 'assigned' if assigned_workers else prev_status
+        event = add_complaint_history('ASSIGNMENT_REJECTED', user, 'assigned', new_status, f"Reason: {reason}", worker_uid=user['uid'])
+        
+        updates = {
+            'assigned_workers': assigned_workers,
             'history': firestore.ArrayUnion([event])
-        })
+        }
+        
+        if not assigned_workers:
+            updates['worker_id'] = None
+            updates['assignment_state'] = 'rejected'
+            updates['status'] = prev_status
+        elif c.get('worker_id') == user['uid']:
+            updates['worker_id'] = assigned_workers[0]
+            
+        doc_ref.update(updates)
         return jsonify({"message": "Assignment rejected"}), 200
 @api.route('/worker/complaints', methods=['GET'])
 @require_roles(['service_worker'])
@@ -1065,13 +1087,24 @@ def worker_list_complaints():
         return jsonify([]), 200
         
     # Strictly scoped to assigned worker
-    docs = db.collection('complaints').where('worker_id', 'in', [user['uid'], user.get('email')]).stream()
+    # Check both the primary worker_id and the multi-worker assigned_workers array
+    docs_primary = db.collection('complaints').where('worker_id', 'in', [user['uid'], user.get('email')]).stream()
+    docs_multi = db.collection('complaints').where('assigned_workers', 'array_contains_any', [user['uid'], user.get('email')]).stream()
     
-    complaints = []
-    for doc in docs:
+    complaints_dict = {}
+    
+    for doc in docs_primary:
         c = doc.to_dict()
         c['id'] = doc.id
-        complaints.append(c)
+        complaints_dict[doc.id] = c
+        
+    for doc in docs_multi:
+        if doc.id not in complaints_dict:
+            c = doc.to_dict()
+            c['id'] = doc.id
+            complaints_dict[doc.id] = c
+            
+    complaints = list(complaints_dict.values())
         
     complaints.sort(key=lambda x: x.get('assigned_at', ''), reverse=True)
     return jsonify(complaints), 200

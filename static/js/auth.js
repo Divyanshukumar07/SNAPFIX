@@ -769,11 +769,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             <button class="btn btn-secondary btn-sm" onclick="editComplaint('${c.id}')">Edit</button>
                             <button class="btn btn-secondary btn-sm" style="color: var(--danger-color); border-color: var(--danger-color);" onclick="deleteComplaint('${c.id}')">Delete</button>
                         </div>
-                        ` : `
-                        <div style="margin-bottom: 1rem;">
-                            <span class="text-muted" style="font-size: 0.85rem;">(Editing blocked: Worker assigned or status progressed)</span>
-                        </div>
-                        `}
+                        ` : ''}
                         
                         ${!['closed', 'escalated', 'false_report', 'rejected'].includes(String(c.status || '').trim().toLowerCase()) ? `
                         <div style="margin-top: 0.5rem; margin-bottom: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
