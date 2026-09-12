@@ -233,6 +233,31 @@ def get_me():
     if not user:
         return jsonify({"error": "Unauthorized"}), 401
     return jsonify(user), 200
+@firestore.transactional
+def get_next_report_id_transaction(transaction, counter_ref):
+    snapshot = counter_ref.get(transaction=transaction)
+    if not snapshot.exists:
+        transaction.set(counter_ref, {'complaints_count': 1})
+        return 1
+    else:
+        new_count = snapshot.get('complaints_count') + 1
+        transaction.update(counter_ref, {'complaints_count': new_count})
+        return new_count
+
+def generate_report_id():
+    year = datetime.utcnow().year
+    if db is None:
+        raise Exception("Firestore is not configured. Cannot generate safe report ID.")
+        
+    try:
+        counter_ref = db.collection('system').document('counters')
+        transaction = db.transaction()
+        count = get_next_report_id_transaction(transaction, counter_ref)
+        return f"SNF-{year}-{count:06d}"
+    except Exception as e:
+        print(f"Critical error generating Report ID: {e}")
+        raise
+
 
 @api.route('/complaints', methods=['POST'])
 @require_roles(['citizen', 'service_worker', 'department_head', 'city_admin', 'main_authority'])
@@ -253,7 +278,13 @@ def create_complaint():
     if contains_profanity(description):
         return jsonify({"error": "Inappropriate language detected. Please revise your description."}), 400
     
+    try:
+        report_id = generate_report_id()
+    except Exception as e:
+        return jsonify({"error": "Failed to generate a unique Report ID. Please try again later."}), 500
+    
     complaint_data = {
+        "report_id": report_id,
         "citizen_id": citizen_id,
         "category": category,
         "description": description,
@@ -270,7 +301,7 @@ def create_complaint():
         "support_count": 1,
         "created_at": datetime.utcnow().isoformat(),
         "updated_at": datetime.utcnow().isoformat(),
-        "history": [add_complaint_history('CREATED', user, None, 'pending_verification', 'Citizen created complaint')]
+        "history": [add_complaint_history('CREATED', user, None, 'pending_verification', f'Citizen created complaint {report_id}')]
     }
     has_evidence = bool(complaint_data.get('image_url'))
     complaint_data["priority_score"] = calculate_priority(category, 1, complaint_data["created_at"], has_evidence=has_evidence, reopen_count=0)
@@ -483,6 +514,39 @@ def list_complaints():
         complaints.append(c)
         
     return jsonify(complaints), 200
+
+@api.route('/complaints/track/<report_id>', methods=['GET'])
+def track_complaint(report_id):
+    if db is None:
+        return jsonify({"error": "Firestore not configured"}), 500
+        
+    docs = db.collection('complaints').where('report_id', '==', report_id.strip().upper()).limit(1).stream()
+    complaint = None
+    for doc in docs:
+        complaint = doc.to_dict()
+        complaint['id'] = doc.id
+        break
+        
+    if not complaint:
+        return jsonify({"error": "Complaint not found"}), 404
+        
+    # Public tracking info (no PII)
+    public_data = {
+        "id": complaint['id'],
+        "report_id": complaint.get('report_id'),
+        "category": complaint.get('category'),
+        "description": complaint.get('description'),
+        "location_locality": complaint.get('location_locality'),
+        "location_state": complaint.get('location_state'),
+        "status": complaint.get('status'),
+        "assignment_state": complaint.get('assignment_state'),
+        "priority_score": complaint.get('priority_score'),
+        "created_at": complaint.get('created_at'),
+        "image_url": complaint.get('image_url'),
+        "support_count": complaint.get('support_count'),
+        "history": complaint.get('history', [])
+    }
+    return jsonify(public_data), 200
 
 @api.route('/complaints/public', methods=['GET'])
 def list_public_complaints():
@@ -846,7 +910,17 @@ def admin_assign_complaint(complaint_id):
         
     c = doc.to_dict()
     
+    worker_doc = db.collection('users').document(worker_id).get()
+    if worker_doc.exists:
+        w_data = worker_doc.to_dict()
+        if w_data.get('worker_status') == 'OFFLINE':
+            return jsonify({"error": "Worker is currently OFFLINE and cannot receive new assignments."}), 400
+            
     force = data.get('force', False)
+    deadline = data.get('expected_completion_deadline')
+    
+    if not deadline:
+        return jsonify({"error": "expected_completion_deadline is required"}), 400
     
     if worker_id in c.get('rejected_workers', []):
         return jsonify({"error": f"Worker {worker_id} previously submitted rejected work for this complaint and cannot be reassigned."}), 400
@@ -865,7 +939,11 @@ def admin_assign_complaint(complaint_id):
     # Strict Scoping Check
     if user.get('role') == 'department_head':
         if not user.get('department_id') or c.get('department') != user.get('department_id'):
-            return jsonify({"error": "Forbidden: Department mismatch"}), 403
+            return jsonify({"error": "Forbidden: Department mismatch for complaint"}), 403
+        if worker_doc.exists:
+            w_data = worker_doc.to_dict()
+            if w_data.get('department_id') != user.get('department_id'):
+                return jsonify({"error": "Forbidden: Cannot assign worker from a different department"}), 403
             
     if c.get('status') not in ['verified', 'reopened']:
         return jsonify({"error": "Complaint must be verified or reopened before assignment"}), 400
@@ -875,8 +953,10 @@ def admin_assign_complaint(complaint_id):
     doc_ref.update({
         'status': 'assigned',
         'worker_id': worker_id,
+        'assigned_workers': firestore.ArrayUnion([worker_id]),
         'assignment_state': 'pending',
         'pre_assignment_status': c.get('status'),
+        'expected_completion_deadline': deadline,
         'assigned_at': datetime.utcnow().isoformat(),
         'assigned_by': user.get('uid')
     })
@@ -894,7 +974,7 @@ def update_worker_status():
     user = get_current_user()
     data = request.json
     new_status = data.get('status')
-    if new_status not in ['active', 'working', 'offline']:
+    if new_status not in ['AVAILABLE', 'OFFLINE']:
         return jsonify({"error": "Invalid status"}), 400
         
     if db:
@@ -908,10 +988,10 @@ def update_worker_status():
 def handle_assignment(complaint_id):
     user = get_current_user()
     data = request.json
-    action = data.get('action') # 'accept' or 'reject'
+    action = data.get('action') # 'accept', 'reject', 'start'
     reason = data.get('reason', '')
     
-    if action not in ['accept', 'reject']:
+    if action not in ['accept', 'reject', 'start']:
         return jsonify({"error": "Invalid action"}), 400
         
     if action == 'reject' and not reason.strip():
@@ -927,18 +1007,31 @@ def handle_assignment(complaint_id):
         return jsonify({"error": "Complaint not found"}), 404
         
     c = doc.to_dict()
-    if c.get('worker_id') != user['uid'] or c.get('assignment_state') != 'pending':
-        return jsonify({"error": "Not a pending assignment for this worker"}), 400
+    if c.get('worker_id') != user['uid']:
+        return jsonify({"error": "Not assigned to this worker"}), 400
         
     if action == 'accept':
+        if c.get('assignment_state') != 'pending':
+            return jsonify({"error": "Assignment is not pending"}), 400
         event = add_complaint_history('ASSIGNMENT_ACCEPTED', user, 'assigned', 'assigned', f"Assignment accepted by {user.get('email')}", worker_uid=user['uid'])
         doc_ref.update({
             'assignment_state': 'accepted',
             'history': firestore.ArrayUnion([event])
         })
         return jsonify({"message": "Assignment accepted"}), 200
+    elif action == 'start':
+        if c.get('assignment_state') != 'accepted':
+            return jsonify({"error": "Assignment must be accepted before starting"}), 400
+        event = add_complaint_history('WORK_STARTED', user, 'assigned', 'assigned', f"Work started by {user.get('email')}", worker_uid=user['uid'])
+        doc_ref.update({
+            'assignment_state': 'in_progress',
+            'history': firestore.ArrayUnion([event])
+        })
+        return jsonify({"message": "Work started"}), 200
     else:
         # Reject
+        if c.get('assignment_state') != 'pending':
+            return jsonify({"error": "Only pending assignments can be rejected"}), 400
         prev_status = c.get('pre_assignment_status', 'verified')
         event = add_complaint_history('ASSIGNMENT_REJECTED', user, 'assigned', prev_status, f"Reason: {reason}", worker_uid=user['uid'])
         doc_ref.update({
@@ -994,13 +1087,14 @@ def worker_upload_proof(complaint_id):
     if c.get('worker_id') not in [user['uid'], user.get('email')]:
         return jsonify({"error": "Forbidden: This task is not assigned to you"}), 403
         
-    if c.get('status') != 'assigned':
-        return jsonify({"error": "Complaint must be assigned before providing proof"}), 400
+    if c.get('assignment_state') not in ['accepted', 'in_progress'] and c.get('status') != 'assigned':
+        return jsonify({"error": "Complaint must be accepted/in_progress before providing proof"}), 400
         
     event = add_complaint_history('WORK_COMPLETED', user, c.get('status'), 'completed', 'Worker uploaded proof', worker_uid=user['uid'])
     
     doc_ref.update({
         'status': 'completed',
+        'assignment_state': 'proof_submitted',
         'proof_image_url': proof_url,
         'completed_at': datetime.utcnow().isoformat(),
         'updated_at': datetime.utcnow().isoformat(),
@@ -1008,6 +1102,133 @@ def worker_upload_proof(complaint_id):
     })
     
     return jsonify({"message": "Proof uploaded successfully"}), 200
+
+@api.route('/worker/complaints/<complaint_id>/extension', methods=['POST'])
+@require_roles(['service_worker'])
+def worker_request_extension(complaint_id):
+    user = get_current_user()
+    data = request.json or {}
+    reason = data.get('reason')
+    requested_days = data.get('requested_days')
+    
+    if not reason or not requested_days:
+        return jsonify({"error": "Reason and requested_days are required"}), 400
+        
+    try:
+        requested_days = int(requested_days)
+        if requested_days <= 0:
+            raise ValueError()
+    except ValueError:
+        return jsonify({"error": "requested_days must be a positive integer"}), 400
+        
+    if db is None:
+        return jsonify({"error": "Firestore not configured"}), 500
+        
+    doc_ref = db.collection('complaints').document(complaint_id)
+    doc = doc_ref.get()
+    
+    if not doc.exists:
+        return jsonify({"error": "Not found"}), 404
+        
+    c = doc.to_dict()
+    
+    if c.get('worker_id') not in [user['uid'], user.get('email')]:
+        return jsonify({"error": "Forbidden"}), 403
+        
+    if c.get('assignment_state') not in ['accepted', 'in_progress']:
+        return jsonify({"error": "Work must be accepted or in progress to request an extension"}), 400
+        
+    extensions = c.get('extensions', [])
+    # Check if there is already a pending extension
+    if any(ext.get('status') == 'pending' for ext in extensions):
+        return jsonify({"error": "You already have a pending extension request"}), 400
+        
+    new_extension = {
+        'id': f"EXT-{int(datetime.utcnow().timestamp())}",
+        'requested_by': user['uid'],
+        'reason': reason,
+        'requested_days': requested_days,
+        'old_deadline': c.get('expected_completion_deadline'),
+        'requested_at': datetime.utcnow().isoformat(),
+        'status': 'pending'
+    }
+    
+    event = add_complaint_history('EXTENSION_REQUESTED', user, c.get('status'), c.get('status'), f"Worker requested {requested_days} days extension. Reason: {reason}", worker_uid=user['uid'])
+    
+    doc_ref.update({
+        'extensions': firestore.ArrayUnion([new_extension]),
+        'history': firestore.ArrayUnion([event])
+    })
+    
+    return jsonify({"message": "Extension requested successfully"}), 200
+
+@api.route('/admin/complaints/<complaint_id>/extension/<extension_id>', methods=['PATCH'])
+@require_roles(['city_admin', 'main_authority', 'department_head'])
+def admin_handle_extension(complaint_id, extension_id):
+    user = get_current_user()
+    data = request.json or {}
+    action = data.get('action') # 'approve' or 'reject'
+    admin_notes = data.get('admin_notes', '')
+    
+    if action not in ['approve', 'reject']:
+        return jsonify({"error": "Invalid action"}), 400
+        
+    if action == 'reject' and not admin_notes.strip():
+        return jsonify({"error": "Admin notes are required when rejecting an extension"}), 400
+        
+    if db is None:
+        return jsonify({"error": "Firestore not configured"}), 500
+        
+    doc_ref = db.collection('complaints').document(complaint_id)
+    doc = doc_ref.get()
+    
+    if not doc.exists:
+        return jsonify({"error": "Not found"}), 404
+        
+    c = doc.to_dict()
+    
+    # Strict Scoping Check
+    if user.get('role') == 'department_head':
+        if not user.get('department_id') or c.get('department') != user.get('department_id'):
+            return jsonify({"error": "Forbidden: Department mismatch"}), 403
+            
+    extensions = c.get('extensions', [])
+    
+    ext_idx = next((i for i, ext in enumerate(extensions) if ext.get('id') == extension_id), None)
+    if ext_idx is None:
+        return jsonify({"error": "Extension request not found"}), 404
+        
+    if extensions[ext_idx].get('status') != 'pending':
+        return jsonify({"error": "Extension request is not pending"}), 400
+        
+    extensions[ext_idx]['status'] = 'approved' if action == 'approve' else 'rejected'
+    extensions[ext_idx]['handled_by'] = user['uid']
+    extensions[ext_idx]['handled_at'] = datetime.utcnow().isoformat()
+    extensions[ext_idx]['admin_notes'] = admin_notes
+    
+    updates = {'extensions': extensions}
+    events = []
+    
+    if action == 'approve':
+        # Extend the expected_completion_deadline
+        current_deadline = c.get('expected_completion_deadline')
+        if current_deadline:
+            try:
+                dt = datetime.fromisoformat(current_deadline)
+                from datetime import timedelta
+                new_dt = dt + timedelta(days=extensions[ext_idx]['requested_days'])
+                updates['expected_completion_deadline'] = new_dt.isoformat()
+            except Exception:
+                pass
+                
+        events.append(add_complaint_history('EXTENSION_APPROVED', user, c.get('status'), c.get('status'), f"Approved {extensions[ext_idx]['requested_days']} days. Notes: {admin_notes}"))
+    else:
+        events.append(add_complaint_history('EXTENSION_REJECTED', user, c.get('status'), c.get('status'), f"Rejected extension. Notes: {admin_notes}"))
+        
+    updates['history'] = firestore.ArrayUnion(events)
+    doc_ref.update(updates)
+    
+    return jsonify({"message": f"Extension {action}d successfully"}), 200
 
 @api.route('/worker/complaints/<complaint_id>/false_report', methods=['POST'])
 @require_roles(['service_worker'])
@@ -1158,6 +1379,182 @@ def citizen_reject_complaint(complaint_id):
     
     return jsonify({"message": "Complaint reopened successfully"}), 200
 
+@api.route('/complaints/<complaint_id>/escalate', methods=['POST'])
+@require_roles(['citizen', 'service_worker', 'department_head', 'city_admin', 'main_authority'])
+def escalate_complaint(complaint_id):
+    user = get_current_user()
+    data = request.json or {}
+    reason = data.get('reason')
+    
+    if not reason:
+        return jsonify({"error": "Reason is required for escalation"}), 400
+        
+    if db is None:
+        return jsonify({"error": "Firestore not configured"}), 500
+        
+    doc_ref = db.collection('complaints').document(complaint_id)
+    doc = doc_ref.get()
+    
+    if not doc.exists:
+        return jsonify({"error": "Not found"}), 404
+        
+    c = doc.to_dict()
+    
+    if user['role'] == 'citizen' and c.get('citizen_id') != user['uid']:
+        return jsonify({"error": "Forbidden"}), 403
+        
+    if user['role'] == 'service_worker' and c.get('worker_id') != user['uid']:
+        return jsonify({"error": "Forbidden: Cannot escalate a complaint you are not assigned to"}), 403
+        
+    if c.get('escalation_requested'):
+        return jsonify({"error": "Complaint is already escalated"}), 400
+        
+    target_authority = 'department_head'
+    if user['role'] in ['citizen', 'service_worker']:
+        target_authority = 'department_head'
+    elif user['role'] == 'department_head':
+        target_authority = 'city_admin'
+    elif user['role'] in ['city_admin', 'main_authority']:
+        target_authority = 'main_authority'
+        
+    event = add_complaint_history('ESCALATED', user, c.get('status'), c.get('status'), f"Manual escalation. Reason: {reason}")
+    
+    escalation_record = {
+        'id': f"ESC-{int(datetime.utcnow().timestamp())}",
+        'reason': reason,
+        'escalated_by': user['uid'],
+        'requester_name': user.get('name', 'Unknown'),
+        'requester_role': user['role'],
+        'target_authority': target_authority,
+        'escalated_at': datetime.utcnow().isoformat(),
+        'status': 'pending'
+    }
+    
+    doc_ref.update({
+        'escalation_requested': True,
+        'escalated_at': datetime.utcnow().isoformat(),
+        'escalations': firestore.ArrayUnion([escalation_record]),
+        'history': firestore.ArrayUnion([event])
+    })
+    
+    return jsonify({"message": "Complaint escalated successfully"}), 200
+
+@api.route('/admin/complaints/<complaint_id>/escalation/<escalation_id>', methods=['PATCH'])
+@require_roles(['city_admin', 'main_authority', 'department_head'])
+def admin_handle_escalation(complaint_id, escalation_id):
+    user = get_current_user()
+    data = request.json or {}
+    decision = data.get('decision')
+    remarks = data.get('remarks', '')
+    
+    if not decision or not remarks.strip():
+        return jsonify({"error": "Decision and remarks are strictly required to resolve an escalation."}), 400
+        
+    if db is None:
+        return jsonify({"error": "Firestore not configured"}), 500
+        
+    doc_ref = db.collection('complaints').document(complaint_id)
+    doc = doc_ref.get()
+    
+    if not doc.exists:
+        return jsonify({"error": "Not found"}), 404
+        
+    c = doc.to_dict()
+    escalations = c.get('escalations', [])
+    
+    esc_idx = next((i for i, esc in enumerate(escalations) if esc.get('id') == escalation_id), None)
+    if esc_idx is None:
+        return jsonify({"error": "Escalation request not found"}), 404
+        
+    target_authority = escalations[esc_idx].get('target_authority')
+    
+    # Check if the user is authorized to handle this escalation
+    if user['role'] == 'department_head':
+        if target_authority != 'department_head' or c.get('department') != user.get('department_id'):
+            return jsonify({"error": "Forbidden: You are not authorized to handle this escalation."}), 403
+    elif user['role'] == 'city_admin':
+        if target_authority not in ['department_head', 'city_admin']:
+            return jsonify({"error": "Forbidden: This escalation requires main authority."}), 403
+            
+    if escalations[esc_idx].get('status') != 'pending':
+        return jsonify({"error": "Escalation request is not pending"}), 400
+        
+    escalations[esc_idx]['status'] = 'resolved'
+    escalations[esc_idx]['decision'] = decision
+    escalations[esc_idx]['remarks'] = remarks
+    escalations[esc_idx]['decision_maker'] = user['uid']
+    escalations[esc_idx]['decision_maker_role'] = user['role']
+    escalations[esc_idx]['decision_timestamp'] = datetime.utcnow().isoformat()
+    
+    # Check if there are any other pending escalations
+    any_pending = any(e.get('status') == 'pending' for e in escalations)
+    
+    event = add_complaint_history('ESCALATION_RESOLVED', user, c.get('status'), c.get('status'), f"Escalation resolved: {decision}. Remarks: {remarks}")
+    
+    doc_ref.update({
+        'escalations': escalations,
+        'escalation_requested': any_pending,
+        'history': firestore.ArrayUnion([event])
+    })
+    
+    return jsonify({"message": "Escalation resolved successfully"}), 200
+
+@api.route('/admin/warnings', methods=['GET'])
+@require_roles(['city_admin', 'main_authority', 'department_head'])
+def admin_warnings():
+    user = get_current_user()
+    
+    if db is None:
+        return jsonify([]), 200
+        
+    # We define warnings as complaints that are either escalated OR have a missed expected_completion_deadline
+    # Because Firestore lacks complex OR queries without composite indexes, we will query all unresolved assigned tasks and filter in-memory.
+    # In production, we'd use a dedicated indexed field like `requires_attention` = true.
+    
+    query = db.collection('complaints').where('status', 'in', ['assigned'])
+    if user['role'] == 'department_head':
+        query = query.where('department', '==', user.get('department_id', ''))
+        
+    docs = query.stream()
+    warnings = []
+    
+    now = datetime.utcnow()
+    for doc in docs:
+        c = doc.to_dict()
+        c['id'] = doc.id
+        
+        is_overdue = False
+        deadline = c.get('expected_completion_deadline')
+        if deadline:
+            try:
+                dt = datetime.fromisoformat(deadline)
+                if now > dt:
+                    is_overdue = True
+            except Exception:
+                pass
+                
+        if is_overdue and c.get('status') != 'completed':
+            c['is_overdue'] = True
+            
+        has_relevant_escalation = False
+        if c.get('escalation_requested'):
+            escalations = c.get('escalations', [])
+            for esc in escalations:
+                if esc.get('status') == 'pending':
+                    target = esc.get('target_authority')
+                    if user['role'] == 'main_authority':
+                        has_relevant_escalation = True
+                    elif user['role'] == 'city_admin' and target in ['city_admin', 'department_head']:
+                        has_relevant_escalation = True
+                    elif user['role'] == 'department_head' and target == 'department_head':
+                        has_relevant_escalation = True
+                        
+        if has_relevant_escalation or is_overdue:
+            warnings.append(c)
+            
+    warnings.sort(key=lambda x: x.get('priority_score', 0), reverse=True)
+    return jsonify(warnings), 200
+
 @api.route('/upload_image', methods=['POST'])
 def upload_image():
     user_id = get_current_user_id()
@@ -1233,33 +1630,71 @@ def get_worker_performance(target_uid):
         if not worker_doc.exists or worker_doc.to_dict().get('department_id') != user.get('department_id'):
             return jsonify({"error": "Forbidden: Cannot view workers from other departments"}), 403
 
-    complaints_ref = db.collection('complaints').where('worker_id', '==', target_uid).stream()
+    complaints_ref = db.collection('complaints').where('assigned_workers', 'array_contains', target_uid).stream()
     
     total_assigned = 0
     successfully_completed = 0
     citizen_confirmed = 0
     reopened = 0
+    extensions_requested = 0
+    total_time_seconds = 0
+    completed_with_time = 0
     
     for doc in complaints_ref:
         c = doc.to_dict()
+        
+        # We must attribute events strictly to this worker, not globally to the complaint.
+        # A worker was assigned if they are in assigned_workers. We already know they are from the query.
         total_assigned += 1
         
-        if c.get('status') in ['completed', 'resolved', 'closed']:
-            successfully_completed += 1
-            
-        if c.get('status') in ['resolved', 'closed']:
-            citizen_confirmed += 1
-            
         history = c.get('history', [])
+        
+        # Count citizen confirmations for this worker's submitted proofs
+        # We look for PROOF_SUBMITTED by this worker, and see if it was followed by a CITIZEN_CONFIRMED.
+        # However, an easier way is to just look for the PROOF_REJECTED / RESOLVED / COMPLETED events 
+        # that specifically list this worker's ID (which we added in `add_complaint_history` as `worker_uid` or via `c.get('worker_id')`).
+        
+        # Let's count extensions requested by this worker:
+        extensions = c.get('extensions', [])
+        extensions_requested += sum(1 for ext in extensions if ext.get('requested_by') == target_uid)
+        
+        # Check if the worker successfully completed it (meaning they were the ones who submitted the proof that got accepted)
+        # We can see if the last worker_id on the complaint is them, and it is completed.
+        # Or look through history for PROOF_SUBMITTED by them.
+        worker_submitted_proof = any(e.get('action') == 'PROOF_SUBMITTED' and e.get('actor_uid') == target_uid for e in history)
+        if worker_submitted_proof:
+            if c.get('status') in ['completed', 'resolved', 'closed']:
+                # They submitted a proof and it wasn't just rejected (or if it was, they resubmitted and it finished).
+                # Actually, a better proxy for "they completed it" is if they are the current worker_id and status is completed.
+                if c.get('worker_id') == target_uid:
+                    successfully_completed += 1
+                    if c.get('status') in ['resolved', 'closed']:
+                        citizen_confirmed += 1
+                    
+                    if c.get('assigned_at') and c.get('completed_at'):
+                        try:
+                            assigned_dt = datetime.fromisoformat(c.get('assigned_at'))
+                            completed_dt = datetime.fromisoformat(c.get('completed_at'))
+                            diff = (completed_dt - assigned_dt).total_seconds()
+                            if diff > 0:
+                                total_time_seconds += diff
+                                completed_with_time += 1
+                        except Exception:
+                            pass
+        
         for event in history:
             if event.get('action') == 'PROOF_REJECTED' and event.get('worker_uid') == target_uid:
                 reopened += 1
+                
+    avg_time_hours = (total_time_seconds / completed_with_time / 3600) if completed_with_time > 0 else 0
                 
     return jsonify({
         "total_assigned": total_assigned,
         "successfully_completed": successfully_completed,
         "citizen_confirmed": citizen_confirmed,
-        "reopened_from_rejection": reopened
+        "reopened_from_rejection": reopened,
+        "extensions_requested": extensions_requested,
+        "avg_time_hours": round(avg_time_hours, 1)
     }), 200
 
 @api.route('/admin/users/<target_uid>/ban', methods=['POST'])

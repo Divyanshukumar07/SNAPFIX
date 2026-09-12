@@ -247,6 +247,12 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('perf-confirmed').innerText = data.citizen_confirmed;
             document.getElementById('perf-rejected').innerText = data.reopened_from_rejection;
             
+            const extEl = document.getElementById('perf-extensions');
+            if (extEl) extEl.innerText = data.extensions_requested;
+            
+            const timeEl = document.getElementById('perf-time');
+            if (timeEl) timeEl.innerText = data.avg_time_hours + " hrs";
+            
             loadingEl.style.display = 'none';
             contentEl.style.display = 'block';
         } catch (err) {

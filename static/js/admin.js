@@ -85,7 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    window.assignWorker = async function(complaintId, workerId = null, force = false) {
+    window.assignWorker = async function(complaintId, workerId = null, force = false, deadline = null) {
         if (!workerId) {
             if (!window.SnapFixModal) return;
             workerId = await window.SnapFixModal.prompt(
@@ -94,6 +94,22 @@ document.addEventListener('DOMContentLoaded', () => {
                 "Worker Email or ID..."
             );
             if (!workerId) return;
+            
+            let deadlineInput = await window.SnapFixModal.prompt(
+                "Set Deadline (Optional)",
+                "Enter deadline (YYYY-MM-DD) or leave blank:",
+                "YYYY-MM-DD"
+            );
+            if (deadlineInput && deadlineInput.trim() !== '') {
+                try {
+                    const d = new Date(deadlineInput);
+                    if (isNaN(d)) throw new Error();
+                    deadline = d.toISOString();
+                } catch(e) {
+                    if (window.SnapFixToast) window.SnapFixToast.show("Invalid date format. Proceeding without deadline.", "error");
+                    deadline = null;
+                }
+            }
         }
 
         const user = auth.currentUser;
@@ -107,7 +123,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     'Authorization': 'Bearer ' + token,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ worker_id: workerId, force: force })
+                body: JSON.stringify({ worker_id: workerId, force: force, expected_completion_deadline: deadline })
             });
             const data = await res.json();
             
@@ -119,7 +135,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     "Assign Anyway"
                 );
                 if (forceAssign) {
-                    return assignWorker(complaintId, workerId, true);
+                    return assignWorker(complaintId, workerId, true, deadline);
                 } else {
                     return;
                 }
@@ -128,6 +144,82 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!res.ok) throw new Error(data.error || "Failed to assign complaint");
             
             if (window.SnapFixToast) window.SnapFixToast.show("Complaint assigned to worker successfully!", "success");
+            loadAdminComplaints(user, currentFilter);
+        } catch(err) {
+            if (window.SnapFixToast) window.SnapFixToast.show(err.message, "error");
+        }
+    };
+
+    window.handleExtension = async function(complaintId, extensionId, action) {
+        if (!window.SnapFixModal) return;
+        
+        let notes = '';
+        if (action === 'reject') {
+            notes = await window.SnapFixModal.prompt(
+                "Reject Extension",
+                "Enter reason for rejection:",
+                "Reason..."
+            );
+            if (!notes) return; // required for rejection
+        } else {
+            notes = await window.SnapFixModal.prompt(
+                "Approve Extension",
+                "Optional notes:",
+                "Notes..."
+            );
+        }
+
+        const user = auth.currentUser;
+        if (!user) return;
+        
+        try {
+            const token = await user.getIdToken();
+            const res = await fetch(`/api/admin/complaints/${complaintId}/extension/${extensionId}`, {
+                method: 'PATCH',
+                headers: { 
+                    'Authorization': 'Bearer ' + token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ action: action, admin_notes: notes || '' })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to process extension");
+            
+            if (window.SnapFixToast) window.SnapFixToast.show(`Extension ${action}d successfully`, "success");
+            loadAdminComplaints(user, currentFilter);
+        } catch(err) {
+            if (window.SnapFixToast) window.SnapFixToast.show(err.message, "error");
+        }
+    };
+    
+    window.handleEscalation = async function(complaintId, escalationId, action, detailsHtml) {
+        if (!window.SnapFixModal) return;
+        
+        let notes = await window.SnapFixModal.prompt(
+            action === 'resolve' ? "Resolve Escalation" : "Reject Escalation",
+            detailsHtml + (action === 'reject' ? "<br><br><strong>Enter mandatory remarks for rejection:</strong>" : "<br><br><strong>Optional remarks:</strong>"),
+            "Remarks..."
+        );
+        
+        if (action === 'reject' && !notes) return;
+        
+        const user = auth.currentUser;
+        if (!user) return;
+        
+        try {
+            const token = await user.getIdToken();
+            const res = await fetch(`/api/admin/complaints/${complaintId}/escalation/${escalationId}`, {
+                method: 'PATCH',
+                headers: { 
+                    'Authorization': 'Bearer ' + token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ decision: action, remarks: notes || 'Resolved without remarks' })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || "Failed to process escalation");
+            
+            if (window.SnapFixToast) window.SnapFixToast.show(`Escalation ${action}d successfully`, "success");
             loadAdminComplaints(user, currentFilter);
         } catch(err) {
             if (window.SnapFixToast) window.SnapFixToast.show(err.message, "error");
@@ -145,7 +237,11 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const token = await user.getIdToken();
             let url = '/api/admin/complaints';
-            if (statusFilter) url += '?status=' + statusFilter;
+            if (statusFilter === 'warnings') {
+                url = '/api/admin/warnings';
+            } else if (statusFilter) {
+                url += '?status=' + statusFilter;
+            }
             
             const response = await fetch(url, {
                 headers: { 'Authorization': 'Bearer ' + token }
@@ -200,9 +296,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 html += `
                     <div class="card" style="padding: 1.5rem; border-left: 4px solid var(--primary-color);">
-                        <div style="display: flex; justify-content: space-between;">
-                            <h4>${c.category} <span style="font-size:0.8rem; font-weight:normal; background:#eee; padding:2px 6px; border-radius:4px;">${c.department || 'Unassigned'}</span>${overdueBadge}</h4>
-                            <span style="font-size:0.85rem; font-weight:bold;">Status: ${c.status.toUpperCase()}</span>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <div>
+                                <span style="font-size: 0.8rem; font-weight: bold; color: var(--text-muted);">${c.report_id || 'ID: ' + c.id.substring(0,8)}</span>
+                                <h4 style="margin-top: 0.2rem; margin-bottom: 0;">${c.category} <span style="font-size:0.8rem; font-weight:normal; background:#eee; padding:2px 6px; border-radius:4px;">${c.department || 'Unassigned'}</span>${overdueBadge}</h4>
+                            </div>
+                            <span style="font-size:0.85rem; font-weight:bold; background: #e2e8f0; padding: 0.2rem 0.6rem; border-radius: 12px;">${c.status.toUpperCase()}</span>
                         </div>
                         <p style="margin: 0.5rem 0;">${c.description}</p>
                         <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 1rem;">📍 ${c.location_text}</p>
@@ -231,6 +330,58 @@ document.addEventListener('DOMContentLoaded', () => {
                             </div>
                         </div>
                         
+                        ${c.extensions && c.extensions.length > 0 ? `
+                        <div style="margin-top: 1rem; background: #fffbeb; border: 1px solid #fde68a; padding: 1rem; border-radius: 8px;">
+                            <h5 style="margin-bottom: 0.5rem; color: #b45309;">Extension Requests</h5>
+                            ${c.extensions.map(ext => `
+                                <div style="margin-bottom: 0.5rem; font-size: 0.85rem; padding-bottom: 0.5rem; border-bottom: 1px solid #fcd34d;">
+                                    <strong>Requested Days:</strong> ${ext.requested_days}<br>
+                                    <strong>Reason:</strong> ${ext.reason}<br>
+                                    <strong>Status:</strong> <span style="font-weight: bold; color: ${ext.status === 'pending' ? '#d97706' : ext.status === 'approved' ? 'green' : 'red'};">${ext.status.toUpperCase()}</span>
+                                    ${ext.status === 'pending' ? `
+                                        <div style="margin-top: 0.5rem;">
+                                            <button class="btn btn-primary btn-sm" onclick="handleExtension('${c.id}', '${ext.id}', 'approve')">Approve</button>
+                                            <button class="btn btn-danger btn-sm" onclick="handleExtension('${c.id}', '${ext.id}', 'reject')">Reject</button>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                        ` : ''}
+                        
+                        ${c.escalations && c.escalations.length > 0 ? `
+                        <div style="margin-top: 1rem; background: #fee2e2; border: 1px solid #fca5a5; padding: 1rem; border-radius: 8px;">
+                            <h5 style="margin-bottom: 0.5rem; color: #991b1b;">Escalation Requests</h5>
+                            ${c.escalations.map(esc => {
+                                let canResolve = false;
+                                if (esc.status === 'pending' && window.currentUserRole) {
+                                    if (window.currentUserRole === 'main_authority') {
+                                        canResolve = true;
+                                    } else if (window.currentUserRole === 'city_admin' && ['city_admin', 'department_head'].includes(esc.target_authority)) {
+                                        canResolve = true;
+                                    } else if (window.currentUserRole === 'department_head' && esc.target_authority === 'department_head') {
+                                        canResolve = true;
+                                    }
+                                }
+                                return `
+                                <div style="margin-bottom: 0.5rem; font-size: 0.85rem; padding-bottom: 0.5rem; border-bottom: 1px solid #fecaca;">
+                                    <strong>Requested By:</strong> ${esc.requester_name || 'Unknown'} (${esc.requester_role || 'Unknown'})<br>
+                                    <strong>Reason:</strong> ${esc.reason}<br>
+                                    <strong>Target Authority:</strong> ${esc.target_authority}<br>
+                                    <strong>Date:</strong> ${new Date(esc.escalated_at).toLocaleString()}<br>
+                                    <strong>Status:</strong> <span style="font-weight: bold; color: ${esc.status === 'pending' ? '#dc2626' : 'green'};">${(esc.status || 'pending').toUpperCase()}</span>
+                                    ${esc.status === 'resolved' ? `<br><strong>Decision:</strong> ${esc.decision}<br><strong>Remarks:</strong> ${esc.remarks}` : ''}
+                                    ${canResolve ? `
+                                        <div style="margin-top: 0.5rem;">
+                                            <button class="btn btn-primary btn-sm" onclick="handleEscalation('${c.id}', '${esc.id}', 'resolve', \`Report ID: ${c.report_id || 'ID: ' + c.id.substring(0,8)}<br>Category: ${c.category}<br>Requester: ${esc.requester_name || 'Unknown'} (${esc.requester_role || 'Unknown'})<br>Target Authority: ${esc.target_authority}<br>Reason: ${esc.reason}<br>Date: ${new Date(esc.escalated_at).toLocaleString()}\`)">Review Escalation (Resolve)</button>
+                                            <button class="btn btn-danger btn-sm" onclick="handleEscalation('${c.id}', '${esc.id}', 'reject', \`Report ID: ${c.report_id || 'ID: ' + c.id.substring(0,8)}<br>Category: ${c.category}<br>Requester: ${esc.requester_name || 'Unknown'} (${esc.requester_role || 'Unknown'})<br>Target Authority: ${esc.target_authority}<br>Reason: ${esc.reason}<br>Date: ${new Date(esc.escalated_at).toLocaleString()}\`)">Reject / Decline</button>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                                `;
+                            }).join('')}
+                        </div>
+                        ` : ''}
                         ${c.history && c.history.length > 0 ? `
                         <details style="margin-top: 1rem; border-top: 1px dashed #cbd5e1; padding-top: 1rem;">
                             <summary style="cursor: pointer; font-weight: bold; color: #475569;">Activity Timeline (${c.history.length})</summary>

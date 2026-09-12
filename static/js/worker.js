@@ -162,11 +162,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else if (c.status === 'assigned' && c.assignment_state === 'accepted') {
                     actionHtml = `
                         <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed #ccc;">
+                            <p style="font-size: 0.9rem; margin-bottom: 0.5rem; color: #475569;">You have accepted this task. Ready to start?</p>
+                            <button class="btn btn-primary btn-sm" onclick="startWork('${c.id}')">Start Work</button>
+                        </div>
+                    `;
+                } else if (c.status === 'assigned' && c.assignment_state === 'in_progress') {
+                    actionHtml = `
+                        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px dashed #ccc;">
                             <label style="display:block; margin-bottom: 0.5rem; font-weight:bold;">Upload Proof of Completion</label>
                             <input type="file" id="proof-file-${c.id}" accept="image/png, image/jpeg" style="margin-bottom: 0.5rem;">
-                            <div style="display: flex; gap: 1rem;">
+                            <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
                                 <button id="btn-proof-${c.id}" class="btn btn-primary btn-sm" onclick="uploadProof('${c.id}')">Submit Proof</button>
-                                <button class="btn btn-danger btn-sm" onclick="markFalseReport('${c.id}')">Mark as False Report</button>
+                                <button class="btn btn-secondary btn-sm" onclick="requestExtension('${c.id}')">Request Extension</button>
+                                <button class="btn btn-danger btn-sm" onclick="markFalseReport('${c.id}')">Mark False Report</button>
                             </div>
                         </div>
                     `;
@@ -180,8 +188,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 html += `
                     <div class="card" style="padding: 1.5rem; border-left: 4px solid #f59e0b;">
-                        <div style="display: flex; justify-content: space-between;">
-                            <h4>${c.category}</h4>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                            <div>
+                                <span style="font-size: 0.8rem; font-weight: bold; color: var(--text-muted);">${c.report_id || 'ID: ' + c.id.substring(0,8)}</span>
+                                <h4 style="margin-top: 0.2rem; margin-bottom: 0;">${c.category}</h4>
+                            </div>
                             <span style="font-size:0.85rem; font-weight:bold; padding: 4px 8px; border-radius: 4px; background: #eee;">${c.status.toUpperCase()}</span>
                         </div>
                         <p style="margin: 0.5rem 0;">${c.description}</p>
@@ -226,7 +237,75 @@ async function acceptAssignment(complaintId) {
         if (window.SnapFixToast) window.SnapFixToast.show(error.message, "error");
     }
 }
+async function startWork(complaintId) {
+    if (!auth.currentUser) return;
+    try {
+        const token = await auth.currentUser.getIdToken();
+        const res = await fetch(`/api/worker/complaints/${complaintId}/assignment`, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ action: 'start' })
+        });
+        
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to start work');
+        
+        if (window.SnapFixToast) window.SnapFixToast.show("Work started!", "success");
+        setTimeout(() => location.reload(), 1000);
+    } catch (error) {
+        if (window.SnapFixToast) window.SnapFixToast.show(error.message, "error");
+    }
+}
 
+async function requestExtension(complaintId) {
+    if (!auth.currentUser) return;
+    try {
+        if (!window.SnapFixModal) return;
+        
+        const daysStr = await window.SnapFixModal.prompt(
+            "Request Extension",
+            "How many extra days do you need?",
+            "e.g. 2"
+        );
+        if (daysStr === null) return;
+        const requested_days = parseInt(daysStr, 10);
+        if (isNaN(requested_days) || requested_days <= 0) {
+            if (window.SnapFixToast) window.SnapFixToast.show("Please enter a valid number of days", "error");
+            return;
+        }
+        
+        const reason = await window.SnapFixModal.prompt(
+            "Request Extension",
+            "Why do you need an extension?",
+            "Reason..."
+        );
+        if (reason === null) return;
+        if (!reason.trim()) {
+            if (window.SnapFixToast) window.SnapFixToast.show("Reason is required", "error");
+            return;
+        }
+        
+        const token = await auth.currentUser.getIdToken();
+        const res = await fetch(`/api/worker/complaints/${complaintId}/extension`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ reason: reason.trim(), requested_days: requested_days })
+        });
+        
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to request extension');
+        
+        if (window.SnapFixToast) window.SnapFixToast.show("Extension requested successfully!", "success");
+    } catch (error) {
+        if (window.SnapFixToast) window.SnapFixToast.show(error.message, "error");
+    }
+}
 async function rejectAssignment(complaintId) {
     if (!auth.currentUser) return;
     try {

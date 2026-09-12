@@ -11,36 +11,51 @@
     <button id="tab-complaints" class="btn btn-secondary" style="border: none; border-radius: 0; border-bottom: 3px solid transparent;" onclick="setTab('complaints')">COMPLAINTS</button>
     <button id="tab-inprogress" class="btn btn-secondary" style="border: none; border-radius: 0; border-bottom: 3px solid transparent;" onclick="setTab('inprogress')">IN PROGRESS</button>
     <button id="tab-completed" class="btn btn-secondary" style="border: none; border-radius: 0; border-bottom: 3px solid transparent;" onclick="setTab('completed')">COMPLETED</button>
+    <button id="tab-track" class="btn btn-secondary" style="border: none; border-radius: 0; border-bottom: 3px solid transparent;" onclick="setTab('track')">TRACK REPORT</button>
 </div>
 
-<!-- Search & Filters -->
-<div class="card" style="padding: 1rem; margin-bottom: 1.5rem; background: #f8fafc; border: 1px dashed var(--border-color);">
-    <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
-        <input type="text" id="search-input" placeholder="Search complaints..." style="flex: 1; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px;">
+<!-- Dynamic content wrappers -->
+<div id="filters-container">
+    <div class="card" style="padding: 1rem; margin-bottom: 1.5rem; background: #f8fafc; border: 1px dashed var(--border-color);">
+        <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+            <input type="text" id="search-input" placeholder="Search complaints..." style="flex: 1; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px;">
+        </div>
+        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <select id="filter-category" style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; flex: 1;">
+                <option value="">Category ▼</option>
+                <option value="Garbage/Waste">Garbage/Waste</option>
+                <option value="Streetlight/Electrical">Streetlight/Electrical</option>
+                <option value="Roads">Roads & Potholes</option>
+                <option value="Water/Sewage">Water/Sewage</option>
+                <option value="Other">Other</option>
+            </select>
+            <select id="filter-state" style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; flex: 1;">
+                <option value="">State ▼</option>
+                <option value="Goa">Goa</option>
+                <option value="Maharashtra">Maharashtra</option>
+                <option value="Karnataka">Karnataka</option>
+            </select>
+            <select id="filter-region" style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; flex: 1;">
+                <option value="">Region ▼</option>
+                <option value="North Goa">North Goa</option>
+                <option value="South Goa">South Goa</option>
+                <option value="Mumbai">Mumbai</option>
+            </select>
+            <input type="text" id="filter-locality" placeholder="Locality ▼" style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; flex: 1;">
+            <button class="btn btn-secondary btn-sm" onclick="clearFilters()">Clear Filters</button>
+        </div>
     </div>
-    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
-        <select id="filter-category" style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; flex: 1;">
-            <option value="">Category ▼</option>
-            <option value="Garbage/Waste">Garbage/Waste</option>
-            <option value="Streetlight/Electrical">Streetlight/Electrical</option>
-            <option value="Roads">Roads & Potholes</option>
-            <option value="Water/Sewage">Water/Sewage</option>
-            <option value="Other">Other</option>
-        </select>
-        <select id="filter-state" style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; flex: 1;">
-            <option value="">State ▼</option>
-            <option value="Goa">Goa</option>
-            <option value="Maharashtra">Maharashtra</option>
-            <option value="Karnataka">Karnataka</option>
-        </select>
-        <select id="filter-region" style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; flex: 1;">
-            <option value="">Region ▼</option>
-            <option value="North Goa">North Goa</option>
-            <option value="South Goa">South Goa</option>
-            <option value="Mumbai">Mumbai</option>
-        </select>
-        <input type="text" id="filter-locality" placeholder="Locality ▼" style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; flex: 1;">
-        <button class="btn btn-secondary btn-sm" onclick="clearFilters()">Clear Filters</button>
+</div>
+
+<div id="track-container" style="display: none; margin-bottom: 1.5rem;">
+    <div class="card" style="padding: 2rem; text-align: center; background: #f8fafc; border: 1px dashed var(--border-color);">
+        <h3 style="margin-bottom: 1rem;">Track Your Report</h3>
+        <p class="text-muted" style="margin-bottom: 1.5rem;">Enter your unique Report ID to check its real-time status and timeline.</p>
+        <div style="display: flex; gap: 0.5rem; max-width: 500px; margin: 0 auto;">
+            <input type="text" id="track-input" placeholder="e.g. SNF-2026-000184" style="flex: 1; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 4px; font-size: 1.1rem; text-transform: uppercase;">
+            <button class="btn btn-primary" onclick="trackComplaint()">Track</button>
+        </div>
+        <div id="track-result" style="margin-top: 2rem; text-align: left;"></div>
     </div>
 </div>
 
@@ -118,8 +133,9 @@ function clearFilters() {
 
 function setTab(tabId) {
     currentTab = tabId;
-    ['complaints', 'inprogress', 'completed'].forEach(id => {
+    ['complaints', 'inprogress', 'completed', 'track'].forEach(id => {
         const btn = document.getElementById('tab-' + id);
+        if (!btn) return;
         if (id === tabId) {
             btn.style.borderBottomColor = 'var(--primary-color)';
             btn.style.color = 'var(--primary-color)';
@@ -130,7 +146,72 @@ function setTab(tabId) {
             btn.style.fontWeight = 'normal';
         }
     });
-    renderComplaints();
+    
+    if (tabId === 'track') {
+        document.getElementById('filters-container').style.display = 'none';
+        document.getElementById('public-complaints-list').style.display = 'none';
+        document.getElementById('track-container').style.display = 'block';
+    } else {
+        document.getElementById('filters-container').style.display = 'block';
+        document.getElementById('public-complaints-list').style.display = 'grid';
+        document.getElementById('track-container').style.display = 'none';
+        renderComplaints();
+    }
+}
+
+async function trackComplaint() {
+    const input = document.getElementById('track-input').value.trim().toUpperCase();
+    const resultDiv = document.getElementById('track-result');
+    
+    if (!input) {
+        resultDiv.innerHTML = '<p class="text-danger">Please enter a valid Report ID.</p>';
+        return;
+    }
+    
+    resultDiv.innerHTML = '<p class="text-muted">Searching...</p>';
+    
+    try {
+        const res = await fetch(`/api/complaints/track/${encodeURIComponent(input)}`);
+        if (!res.ok) {
+            if (res.status === 404) throw new Error("Report not found. Please check the ID.");
+            throw new Error("Failed to track report.");
+        }
+        
+        const c = await res.json();
+        
+        let timelineHtml = '<div style="padding-left: 1rem; border-left: 2px solid #e2e8f0; margin-top: 1rem;">';
+        if (c.history && c.history.length > 0) {
+            c.history.forEach(h => {
+                timelineHtml += `
+                    <div style="margin-bottom: 1rem; position: relative;">
+                        <div style="position: absolute; left: -1.4rem; top: 0.2rem; width: 0.6rem; height: 0.6rem; background: var(--primary-color); border-radius: 50%;"></div>
+                        <div style="font-size: 0.8rem; color: #64748b;">${new Date(h.timestamp).toLocaleString()}</div>
+                        <div style="font-weight: bold;">${h.action.replace(/_/g, ' ')}</div>
+                    </div>
+                `;
+            });
+        } else {
+            timelineHtml += '<p>No timeline events found.</p>';
+        }
+        timelineHtml += '</div>';
+        
+        resultDiv.innerHTML = `
+            <div class="card" style="padding: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius); background: #fff;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                    <span style="font-weight: bold; color: var(--primary-color)">${c.category}</span>
+                    <span style="background: #e2e8f0; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.85rem; font-weight: bold;">${(c.status || '').toUpperCase().replace(/_/g, ' ')}</span>
+                </div>
+                <h4 style="margin-bottom: 0.5rem;">${c.description || 'No description'}</h4>
+                <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 1rem;">📍 ${(c.location_locality ? c.location_locality + ', ' : '')}${c.location_state || ''}</p>
+                
+                <h5 style="margin-bottom: 0.5rem; margin-top: 1rem; border-top: 1px solid #f1f5f9; padding-top: 1rem;">Progress Timeline</h5>
+                ${timelineHtml}
+            </div>
+        `;
+        
+    } catch (error) {
+        resultDiv.innerHTML = `<p class="text-danger">${error.message}</p>`;
+    }
 }
 
 async function fetchComplaints() {
@@ -194,11 +275,14 @@ function renderComplaints() {
         
         html += `
             <div class="card" style="padding: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius); background: #fff;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
+                    <span style="font-size: 0.8rem; font-weight: bold; color: var(--text-muted);">${c.report_id || 'ID: ' + c.id.substring(0,8)}</span>
                     <span style="font-weight: bold; color: var(--primary-color)">${c.category}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; align-items: center;">
+                    <h4 style="margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%;">${c.description || 'No description'}</h4>
                     <span style="background: #e2e8f0; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.85rem; font-weight: bold;">${c.status.toUpperCase().replace('_', ' ')}</span>
                 </div>
-                <h4 style="margin-bottom: 0.5rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${c.description || 'No description'}</h4>
                 <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 0.5rem;">📍 ${(c.location_locality ? c.location_locality + ', ' : '')}${c.location_text || ''}</p>
                 
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; border-top: 1px solid #f1f5f9; padding-top: 0.5rem;">

@@ -24,12 +24,13 @@
 </div>
 
 <div style="display: flex; gap: 1rem; margin-bottom: 2rem; justify-content: space-between;">
-    <div style="display: flex; gap: 1rem;">
+    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
         <button class="btn btn-primary" onclick="filterComplaints('')">All</button>
         <button class="btn btn-secondary" onclick="filterComplaints('pending_verification')">Pending Verification</button>
         <button class="btn btn-secondary" onclick="filterComplaints('verified')">Verified</button>
+        <button class="btn btn-secondary" style="color: #dc2626; border-color: #fca5a5; background: #fef2f2;" onclick="filterComplaints('warnings')">⚠ Warnings & Escalations</button>
     </div>
-    <a href="/admin/heatmap" class="btn btn-primary" style="background: var(--secondary-color);">🗺️ View Civic Map</a>
+    <a href="/admin/heatmap" class="btn btn-primary" style="background: var(--secondary-color); white-space: nowrap;">🗺️ View Civic Map</a>
 </div>
 
 <div id="admin-error" class="alert alert-error" style="display: none;"></div>

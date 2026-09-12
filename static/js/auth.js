@@ -66,10 +66,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 
                 // Update nav to just show they are logged in but unverified
-                navLinks.innerHTML = `
-                    <span>${user.email} (Unverified)</span>
-                    <button id="nav-logout" class="btn btn-secondary" style="padding: 0.3rem 0.8rem;">Logout</button>
-                `;
+                const navAuthBtnsTmp = document.getElementById('nav-auth-buttons');
+                const navProfileMenuTmp = document.getElementById('nav-profile-menu');
+                const navAppTabsTmp = document.getElementById('nav-app-tabs');
+                
+                if (navAuthBtnsTmp) navAuthBtnsTmp.style.display = 'none';
+                if (navProfileMenuTmp) navProfileMenuTmp.style.display = 'none';
+                if (navAppTabsTmp) {
+                    navAppTabsTmp.innerHTML = `
+                        <span class="text-muted">${user.email} (Unverified)</span>
+                        <button id="nav-logout" class="btn btn-secondary btn-sm">Logout</button>
+                    `;
+                }
             } else {
                 // User is verified
                 if (path === '/verify') {
@@ -84,7 +92,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 // Optimistic UI update to prevent flashing Login/Signup
-                navLinks.innerHTML = `<span>${user.email} (Loading...)</span>`;
+                const navAuthBtnsTmp = document.getElementById('nav-auth-buttons');
+                const navProfileMenuTmp = document.getElementById('nav-profile-menu');
+                if (navAuthBtnsTmp) navAuthBtnsTmp.style.display = 'none';
+                if (navProfileMenuTmp) navProfileMenuTmp.style.display = 'flex';
 
                 // Normal authenticated state - Fetch Role from Backend
                 const token = await user.getIdToken();
@@ -97,7 +108,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (res.ok) {
                         const userData = await res.json();
                         role = userData.role;
+                        window.currentUserRole = role;
+                        window.currentUserDepartment = userData.department_id;
                     }
+                    window.currentUserId = user.uid;
 
                     let dashboardPath = '/dashboard';
                     if (role === 'service_worker') dashboardPath = '/worker/dashboard';
@@ -178,15 +192,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (navAppTabs) navAppTabs.innerHTML = tabsHtml;
 
                     let dropHtml = `
-                        <div style="padding: 1rem; border-bottom: 1px solid var(--border-color); display:flex; flex-direction:column; align-items:center;">
-                            <div style="width: 48px; height: 48px; background: var(--primary-color); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.5rem; user-select: none; margin-bottom: 0.5rem;">
+                        <div style="padding: 1.25rem 1rem 1rem 1rem; border-bottom: 1px solid var(--border-color); display:flex; flex-direction:column; align-items:center; background: #f8fafc; border-radius: 8px 8px 0 0;">
+                            <div style="width: 48px; height: 48px; background: var(--primary-color); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 1.25rem; user-select: none; margin-bottom: 0.75rem; border: 3px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                                 ${(user.displayName || user.email || 'U').charAt(0).toUpperCase()}
                             </div>
-                            <strong style="margin-bottom:0.2rem;">${user.displayName || 'SnapFix User'}</strong>
-                            <small class="text-muted" style="margin-bottom:0.2rem;">${user.email}</small>
-                            <span class="badge" style="background:#e2e8f0; color:#475569; font-size:0.75rem; padding:2px 6px; border-radius:4px;">${role.toUpperCase()}</span>
+                            <strong style="margin-bottom:0.25rem; color: var(--text-color); font-size: 0.95rem;">${user.displayName || 'SnapFix User'}</strong>
+                            <small class="text-muted" style="margin-bottom:0.5rem; font-size: 0.8rem;">${user.email}</small>
+                            <span class="badge" style="background: #e0e7ff; color: #4338ca; font-size:0.7rem; padding: 0.25rem 0.6rem; border-radius: 9999px; font-weight: 600; letter-spacing: 0.025em; text-transform: uppercase;">${role}</span>
                         </div>
-                        <a href="#" id="nav-logout" style="padding: 0.75rem 1rem; text-decoration: none; color: var(--text-color); display: block; text-align: center; font-weight: bold; color: var(--danger-color);">Logout</a>
+                        <div style="padding: 0.5rem 0; display: flex; flex-direction: column;">
+                            <a href="#" id="forgot-password-link" style="padding: 0.75rem 1rem; text-decoration: none; color: var(--text-color); display: flex; align-items: center; font-size: 0.9rem; transition: background 0.2s;">
+                                <span style="margin-right: 0.75rem; font-size: 1.1rem;">🔑</span> Forgot Password
+                            </a>
+                            <div style="height: 1px; background: var(--border-color); margin: 0.25rem 0;"></div>
+                            <a href="#" id="nav-logout" style="padding: 0.75rem 1rem; text-decoration: none; color: var(--danger-color); display: flex; align-items: center; font-weight: 500; font-size: 0.9rem; transition: background 0.2s;">
+                                <span style="margin-right: 0.75rem; font-size: 1.1rem;">🚪</span> Logout
+                            </a>
+                        </div>
                     `;
                     if (navDropdown) {
                         navDropdown.innerHTML = dropHtml;
@@ -242,11 +264,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             
-            navLinks.innerHTML = `
-                <a href="/public">Public Wall</a>
-                <a href="/login">Login</a>
-                <a href="/register" class="btn btn-primary">Register</a>
-            `;
+            const navAuthBtnsTmp = document.getElementById('nav-auth-buttons');
+            const navProfileMenuTmp = document.getElementById('nav-profile-menu');
+            const navAppTabsTmp = document.getElementById('nav-app-tabs');
+            
+            if (navAuthBtnsTmp) navAuthBtnsTmp.style.display = 'inline-flex';
+            if (navProfileMenuTmp) navProfileMenuTmp.style.display = 'none';
+            if (navAppTabsTmp) navAppTabsTmp.innerHTML = '';
 
             // Check URL for prefilled verified email
             if (path === '/login') {
@@ -411,7 +435,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- DASHBOARD API FETCH ---
     window.confirmComplaint = async function(complaintId) {
-        if (!confirm("Are you sure this issue has been resolved?")) return;
+        if (!await window.SnapFixModal.confirm("Resolve Complaint", "Are you sure this issue has been resolved?")) return;
         const user = auth.currentUser;
         if (!user) return;
         try {
@@ -421,13 +445,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: { 'Authorization': 'Bearer ' + token }
             });
             if (!res.ok) throw new Error("Failed to confirm");
-            alert("Thank you! The complaint is now closed.");
+            window.SnapFixToast.show("Thank you! The complaint is now closed.", "success");
             loadDashboardComplaints(user);
-        } catch(err) { alert(err.message); }
+        } catch(err) { window.SnapFixToast.show(err.message, "error"); }
     };
 
     window.rejectComplaint = async function(complaintId) {
-        if (!confirm("Are you sure the issue is NOT resolved? This will reopen the complaint.")) return;
+        if (!await window.SnapFixModal.confirm("Reopen Complaint", "Are you sure the issue is NOT resolved? This will reopen the complaint.")) return;
         const user = auth.currentUser;
         if (!user) return;
         try {
@@ -437,13 +461,51 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: { 'Authorization': 'Bearer ' + token }
             });
             if (!res.ok) throw new Error("Failed to reject");
-            alert("Complaint has been reopened for further action.");
+            window.SnapFixToast.show("Complaint has been reopened for further action.", "success");
             loadDashboardComplaints(user);
-        } catch(err) { alert(err.message); }
+        } catch(err) { window.SnapFixToast.show(err.message, "error"); }
+    };
+    window.escalateComplaint = async function(complaintId) {
+        if (!window.SnapFixModal) return;
+        
+        const reason = await window.SnapFixModal.prompt(
+            "Escalate Issue",
+            "Please provide a reason for escalating this complaint:",
+            "Reason..."
+        );
+        
+        if (reason === null) return;
+        if (!reason.trim()) {
+            window.SnapFixToast.show("Reason is required for escalation.", "error");
+            return;
+        }
+
+        const user = auth.currentUser;
+        if (!user) return;
+        
+        try {
+            const token = await user.getIdToken();
+            const res = await fetch(`/api/complaints/${complaintId}/escalate`, {
+                method: 'POST',
+                headers: { 
+                    'Authorization': 'Bearer ' + token,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ reason: reason.trim() })
+            });
+            const data = await res.json();
+            
+            if (!res.ok) throw new Error(data.error || "Failed to escalate");
+            
+            window.SnapFixToast.show("Complaint escalated successfully. An administrator will be notified.", "success");
+            loadDashboardComplaints(user);
+        } catch(err) {
+            window.SnapFixToast.show(err.message, "error");
+        }
     };
 
     window.deleteComplaint = async function(complaintId) {
-        if (!confirm("Are you sure you want to delete this complaint? This action cannot be undone.")) return;
+        if (!await window.SnapFixModal.confirm("Delete Complaint", "Are you sure you want to delete this complaint? This action cannot be undone.")) return;
         const user = auth.currentUser;
         if (!user) return;
         try {
@@ -454,7 +516,8 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             if (!res.ok) throw new Error("Failed to delete complaint. It may already be assigned.");
             loadDashboardComplaints(user);
-        } catch(err) { alert(err.message); }
+            window.SnapFixToast.show("Complaint deleted.", "success");
+        } catch(err) { window.SnapFixToast.show(err.message, "error"); }
     };
 
     window.currentDashboardComplaints = [];
@@ -507,7 +570,7 @@ document.addEventListener('DOMContentLoaded', () => {
             closeEditModal();
             loadDashboardComplaints(user);
         } catch(err) { 
-            alert(err.message); 
+            window.SnapFixToast.show(err.message, "error"); 
         } finally {
             if (btn) { btn.disabled = false; btn.innerText = 'Save Changes'; }
         }
@@ -567,11 +630,9 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <summary style="padding: 0.2rem 0.5rem; cursor: pointer; font-weight: bold; list-style-type: none;">🔥 Priority: ${priority} ▾</summary>
                                 ${c.priority_breakdown ? `
                                 <div style="padding: 0.5rem; border-top: 1px solid #fde68a; font-family: monospace;">
-                                    Severity: +${c.priority_breakdown.severity}<br>
-                                    Evidence: +${c.priority_breakdown.evidence}<br>
-                                    Support : +${c.priority_breakdown.support}<br>
-                                    Age     : +${c.priority_breakdown.age}<br>
-                                    Reopens : +${c.priority_breakdown.reopens}<br>
+                                    Seriousness: +${c.priority_breakdown.seriousness}<br>
+                                    Days Passed: +${c.priority_breakdown.days_passed}<br>
+                                    Supporters : +${c.priority_breakdown.supporters}<br>
                                     <hr style="margin: 4px 0; border-color: #fcd34d;">
                                     Total   : ${c.priority_breakdown.total}
                                 </div>
@@ -600,9 +661,16 @@ document.addEventListener('DOMContentLoaded', () => {
                             <span class="text-muted" style="font-size: 0.85rem;">(Editing blocked: Worker assigned or status progressed)</span>
                         </div>
                         `}
+                        
+                        ${!['closed', 'escalated', 'false_report'].includes(c.status) ? `
+                        <div style="margin-top: 0.5rem; margin-bottom: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                            <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem;">Is this issue severely delayed or being ignored?</p>
+                            <button class="btn btn-secondary btn-sm" style="color: var(--danger-color); border-color: var(--danger-color);" onclick="escalateComplaint('${c.id}')">Escalate Issue 🚨</button>
+                        </div>
+                        ` : ''}
 
                         <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-muted); border-top: 1px solid var(--border-color); padding-top: 0.5rem;">
-                            <span>ID: ${c.id.substring(0, 8)}...</span>
+                            <span>ID: ${c.report_id || c.id.substring(0, 8) + '...'}</span>
                             <span>Reported: ${date}</span>
                         </div>
                         
