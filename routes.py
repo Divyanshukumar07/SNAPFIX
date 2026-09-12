@@ -214,7 +214,15 @@ def get_current_user():
 
 def get_current_user_id():
     user = get_current_user()
-    return user['uid'] if user else None
+    if not user:
+        return None
+    from flask import abort, make_response
+    if user.get('account_status') == 'banned':
+        abort(make_response(jsonify({
+            "error": "banned",
+            "message": "Your account has been banned. Please contact the administrator."
+        }), 403))
+    return user['uid']
 
 def require_roles(allowed_roles):
     def decorator(f):
@@ -226,6 +234,11 @@ def require_roles(allowed_roles):
                     "error": "unauthorized",
                     "message": "Authentication required."
                 }), 401
+            if user.get('account_status') == 'banned':
+                return jsonify({
+                    "error": "banned",
+                    "message": "Your account has been banned. Please contact the administrator."
+                }), 403
             if user.get('role') not in allowed_roles:
                 return jsonify({
                     "error": "forbidden",
@@ -240,6 +253,11 @@ def get_me():
     user = get_current_user()
     if not user:
         return jsonify({"error": "Unauthorized"}), 401
+    if user.get('account_status') == 'banned':
+        return jsonify({
+            "error": "banned",
+            "message": "Your account has been banned. Please contact the administrator."
+        }), 403
     return jsonify(user), 200
 @firestore.transactional
 def get_next_report_id_transaction(transaction, counter_ref):
@@ -736,6 +754,32 @@ def admin_list_complaints():
             c['is_overdue'] = False
             
         complaints.append(c)
+        
+    # Batch enrich worker identities
+    worker_ids = set()
+    for c in complaints:
+        if c.get('worker_id'):
+            worker_ids.add(c.get('worker_id'))
+            
+    worker_profiles = {}
+    if worker_ids:
+        # Fetch up to 10 workers at a time (Firestore limit for in queries is 30)
+        worker_ids_list = list(worker_ids)
+        for i in range(0, len(worker_ids_list), 30):
+            batch = worker_ids_list[i:i+30]
+            users_query = db.collection('users').where('uid', 'in', batch).stream()
+            for udoc in users_query:
+                udata = udoc.to_dict()
+                worker_profiles[udoc.id] = {
+                    "name": udata.get('name', 'Unknown'),
+                    "email": udata.get('email', 'Unknown')
+                }
+                
+    for c in complaints:
+        wid = c.get('worker_id')
+        if wid and wid in worker_profiles:
+            c['worker_name'] = worker_profiles[wid]['name']
+            c['worker_email'] = worker_profiles[wid]['email']
         
     complaints.sort(key=lambda x: x.get('created_at', ''), reverse=True)
     return jsonify(complaints), 200

@@ -289,7 +289,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else if (c.assignment_state === 'accepted') {
                          assignText = 'ACCEPTED / IN PROGRESS';
                     }
-                    actionHtml = `<span style="background: #e0e7ff; color: #4338ca; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: bold; font-size: 0.85rem;">${assignText}: ${c.worker_id}</span>`;
+                    
+                    let workerDisplay = 'Unknown Worker';
+                    if (c.worker_name && c.worker_email) {
+                        workerDisplay = `${c.worker_name} &bull; ${c.worker_email}`;
+                    } else if (c.worker_email) {
+                        workerDisplay = c.worker_email;
+                    }
+                    
+                    actionHtml = `<span style="background: #e0e7ff; color: #4338ca; padding: 0.2rem 0.5rem; border-radius: 4px; font-weight: bold; font-size: 0.85rem;">${assignText}: ${workerDisplay}</span>`;
                 }
                 
                 const overdueBadge = c.is_overdue ? `<span style="background: #fee2e2; color: #dc2626; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.8rem; font-weight: bold; margin-left: 0.5rem;">OVERDUE / ESCALATED</span>` : '';

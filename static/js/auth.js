@@ -111,6 +111,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         window.currentUserRole = role;
                         window.currentUserDepartment = userData.department_id;
                         window.currentUserWorkerStatus = userData.worker_status || 'OFFLINE';
+                    } else if (res.status === 403) {
+                        const errorData = await res.json();
+                        if (errorData.error === 'banned') {
+                            if (window.SnapFixToast) window.SnapFixToast.show("Your account has been banned. Please contact the administrator.", "error");
+                            await firebase.auth().signOut();
+                            setTimeout(() => window.location.href = '/login', 2000);
+                            return;
+                        }
                     }
                     window.currentUserId = user.uid;
 
