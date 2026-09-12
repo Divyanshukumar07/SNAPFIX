@@ -178,6 +178,7 @@ def get_current_user():
         uid = decoded_token['uid']
         email = decoded_token.get('email', '')
         email_verified = decoded_token.get('email_verified', False)
+        name = decoded_token.get('name') or decoded_token.get('displayName') or ''
         
         user_ref = db.collection('users').document(uid)
         user_doc = user_ref.get()
@@ -188,12 +189,19 @@ def get_current_user():
             # Ensure UID is in the dict
             if 'uid' not in g.user:
                 g.user['uid'] = uid
+            # Backfill name if missing
+            if name and not g.user.get('name'):
+                g.user['name'] = name
+                user_ref.update({'name': name})
+            elif not g.user.get('name'):
+                g.user['name'] = 'Unknown'
         else:
             role = "citizen"
             
             g.user = {
                 "uid": uid,
                 "email": email,
+                "name": name or 'Unknown',
                 "email_verified": email_verified,
                 "role": role,
                 "department_id": None
@@ -855,17 +863,24 @@ def admin_reject_complaint_flow(complaint_id):
     return jsonify({"message": "Complaint rejected successfully"}), 200
 
 @api.route('/admin/stats', methods=['GET'])
-@require_roles(['city_admin', 'main_authority'])
+@require_roles(['city_admin', 'main_authority', 'department_head'])
 def admin_stats():
-    user_id = get_current_user_id()
+    user = get_current_user()
         
     if db is None:
         return jsonify({"total": 0, "pending": 0, "resolved": 0}), 200
         
     try:
+        query = db.collection('complaints')
+        if user.get('role') == 'department_head':
+            dept_id = user.get('department_id')
+            if not dept_id:
+                return jsonify({"total": 0, "pending": 0, "resolved": 0}), 200
+            query = query.where('department', '==', dept_id)
+            
         # Instead of count() queries which can't easily filter out missing fields, 
         # we'll stream and count in memory to accurately exclude soft-deleted items.
-        docs = db.collection('complaints').stream()
+        docs = query.stream()
         total = 0
         pending = 0
         resolved = 0
@@ -1309,6 +1324,7 @@ def citizen_confirm_complaint(complaint_id):
     
     doc_ref.update({
         'status': 'closed',
+        'assignment_state': 'completed',
         'closed_at': datetime.utcnow().isoformat(),
         'updated_at': datetime.utcnow().isoformat(),
         'history': firestore.ArrayUnion([event])
@@ -1366,10 +1382,12 @@ def citizen_reject_complaint(complaint_id):
     
     if reopen_count >= 3:
         updates['status'] = 'escalated'
+        updates['assignment_state'] = 'escalated'
         updates['escalated_at'] = datetime.utcnow().isoformat()
         events.append(add_complaint_history('ESCALATED', user, 'completed', 'escalated', '3rd reopen limit reached'))
     else:
         updates['status'] = 'reopened'
+        updates['assignment_state'] = 'in_progress'
         updates['reopened_at'] = datetime.utcnow().isoformat()
         events.append(add_complaint_history('REOPENED', user, 'completed', 'reopened'))
         

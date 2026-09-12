@@ -110,6 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         role = userData.role;
                         window.currentUserRole = role;
                         window.currentUserDepartment = userData.department_id;
+                        window.currentUserWorkerStatus = userData.worker_status || 'OFFLINE';
                     }
                     window.currentUserId = user.uid;
 
@@ -177,7 +178,78 @@ document.addEventListener('DOMContentLoaded', () => {
                         tabsHtml += `<a href="/worker/dashboard">Worker Dashboard</a>`;
                         tabsHtml += `<a href="/dashboard">My Complaints</a>`;
                         tabsHtml += `<a href="/complaints/new">Report Complaint</a>`;
-                        if (navWorkerStatus) navWorkerStatus.style.display = 'block';
+                        if (navWorkerStatus) {
+                            navWorkerStatus.style.display = 'flex';
+                            const btn = document.getElementById('nav-worker-status-btn');
+                            const drop = document.getElementById('nav-worker-dropdown');
+                            if (btn && drop) {
+                                const updateWorkerBtnUI = (status) => {
+                                    if (status === 'AVAILABLE') {
+                                        btn.innerHTML = '🟢 Available';
+                                        btn.style.color = '#15803d';
+                                        btn.style.background = '#dcfce7';
+                                    } else {
+                                        btn.innerHTML = '🔴 Offline';
+                                        btn.style.color = '#b91c1c';
+                                        btn.style.background = '#fee2e2';
+                                    }
+                                };
+                                updateWorkerBtnUI(window.currentUserWorkerStatus);
+
+                                drop.innerHTML = `
+                                    <div style="padding: 0.5rem 0; display: flex; flex-direction: column;">
+                                        <a href="#" class="worker-status-option" data-status="AVAILABLE" style="padding: 0.4rem 1rem; text-decoration: none; color: var(--text-color); display: block; font-size: 0.9rem; transition: background 0.2s;">
+                                            🟢 Available
+                                        </a>
+                                        <a href="#" class="worker-status-option" data-status="OFFLINE" style="padding: 0.4rem 1rem; text-decoration: none; color: var(--text-color); display: block; font-size: 0.9rem; transition: background 0.2s;">
+                                            🔴 Offline / On Leave
+                                        </a>
+                                    </div>
+                                `;
+
+                                btn.addEventListener('click', (e) => {
+                                    e.stopPropagation();
+                                    drop.style.display = drop.style.display === 'flex' ? 'none' : 'flex';
+                                });
+                                
+                                document.addEventListener('click', (e) => {
+                                    if (!navWorkerStatus.contains(e.target)) {
+                                        drop.style.display = 'none';
+                                    }
+                                });
+
+                                const opts = drop.querySelectorAll('.worker-status-option');
+                                opts.forEach(opt => {
+                                    opt.addEventListener('click', async (e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        const newStatus = opt.getAttribute('data-status');
+                                        drop.style.display = 'none';
+                                        
+                                        try {
+                                            const token = await user.getIdToken();
+                                            const res = await fetch('/api/worker/status', {
+                                                method: 'PATCH',
+                                                headers: {
+                                                    'Authorization': 'Bearer ' + token,
+                                                    'Content-Type': 'application/json'
+                                                },
+                                                body: JSON.stringify({ status: newStatus })
+                                            });
+                                            if (res.ok) {
+                                                window.currentUserWorkerStatus = newStatus;
+                                                updateWorkerBtnUI(newStatus);
+                                                if (window.SnapFixToast) window.SnapFixToast.show("Status updated successfully", "success");
+                                            } else {
+                                                throw new Error('Failed to update status');
+                                            }
+                                        } catch (err) {
+                                            if (window.SnapFixToast) window.SnapFixToast.show("Error updating status", "error");
+                                        }
+                                    });
+                                });
+                            }
+                        }
                     } else if (role === 'department_head') {
                         tabsHtml += `<a href="/admin/dashboard">Dept Dashboard</a>`;
                         tabsHtml += `<a href="/dashboard">My Complaints</a>`;
@@ -201,11 +273,11 @@ document.addEventListener('DOMContentLoaded', () => {
                             <span class="badge" style="background: #e0e7ff; color: #4338ca; font-size:0.7rem; padding: 0.25rem 0.6rem; border-radius: 9999px; font-weight: 600; letter-spacing: 0.025em; text-transform: uppercase;">${role}</span>
                         </div>
                         <div style="padding: 0.5rem 0; display: flex; flex-direction: column;">
-                            <a href="#" id="forgot-password-link" style="padding: 0.75rem 1rem; text-decoration: none; color: var(--text-color); display: flex; align-items: center; font-size: 0.9rem; transition: background 0.2s;">
+                            <a href="#" id="forgot-password-link" style="padding: 0.4rem 1rem; text-decoration: none; color: var(--text-color); display: flex; align-items: center; font-size: 0.9rem; transition: background 0.2s;">
                                 <span style="margin-right: 0.75rem; font-size: 1.1rem;">🔑</span> Forgot Password
                             </a>
                             <div style="height: 1px; background: var(--border-color); margin: 0.25rem 0;"></div>
-                            <a href="#" id="nav-logout" style="padding: 0.75rem 1rem; text-decoration: none; color: var(--danger-color); display: flex; align-items: center; font-weight: 500; font-size: 0.9rem; transition: background 0.2s;">
+                            <a href="#" id="nav-logout" style="padding: 0.4rem 1rem; text-decoration: none; color: var(--danger-color); display: flex; align-items: center; font-weight: 500; font-size: 0.9rem; transition: background 0.2s;">
                                 <span style="margin-right: 0.75rem; font-size: 1.1rem;">🚪</span> Logout
                             </a>
                         </div>
@@ -233,12 +305,24 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     }
 
-                    if (path === '/dashboard' && role === 'citizen') {
+                    if (path === '/dashboard') {
                         loadDashboardComplaints(user);
                     }
                     
                 } catch (e) {
                     console.error("Failed to fetch user role", e);
+                    // Handle failure gracefully and stop loading states
+                    const errorHtml = `<div class="alert alert-error"><p>Unable to initialize user dashboard.</p></div>`;
+                    if (path === '/dashboard') {
+                        const cl = document.getElementById('complaints-list');
+                        if (cl) cl.innerHTML = errorHtml;
+                    } else if (path === '/worker/dashboard') {
+                        const wcl = document.getElementById('worker-complaints-list');
+                        if (wcl) wcl.innerHTML = errorHtml;
+                    } else if (path === '/admin/dashboard') {
+                        const acl = document.getElementById('admin-complaints-list');
+                        if (acl) acl.innerHTML = errorHtml;
+                    }
                 } finally {
                     const mainContent = document.querySelector('main') || document.querySelector('.container');
                     if (mainContent) {
@@ -434,10 +518,17 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- DASHBOARD API FETCH ---
-    window.confirmComplaint = async function(complaintId) {
-        if (!await window.SnapFixModal.confirm("Resolve Complaint", "Are you sure this issue has been resolved?")) return;
+    window.confirmComplaint = async function(complaintId, btn) {
+        if (btn) btn.disabled = true;
+        if (!await window.SnapFixModal.confirm("Resolve Complaint", "Are you sure this issue has been resolved?")) {
+            if (btn) btn.disabled = false;
+            return;
+        }
         const user = auth.currentUser;
-        if (!user) return;
+        if (!user) {
+            if (btn) btn.disabled = false;
+            return;
+        }
         try {
             const token = await user.getIdToken();
             const res = await fetch(`/api/complaints/${complaintId}/confirm`, {
@@ -447,13 +538,23 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!res.ok) throw new Error("Failed to confirm");
             window.SnapFixToast.show("Thank you! The complaint is now closed.", "success");
             loadDashboardComplaints(user);
-        } catch(err) { window.SnapFixToast.show(err.message, "error"); }
+        } catch(err) { 
+            window.SnapFixToast.show(err.message, "error");
+            if (btn) btn.disabled = false;
+        }
     };
 
-    window.rejectComplaint = async function(complaintId) {
-        if (!await window.SnapFixModal.confirm("Reopen Complaint", "Are you sure the issue is NOT resolved? This will reopen the complaint.")) return;
+    window.rejectComplaint = async function(complaintId, btn) {
+        if (btn) btn.disabled = true;
+        if (!await window.SnapFixModal.confirm("Reopen Complaint", "Are you sure the issue is NOT resolved? This will reopen the complaint.")) {
+            if (btn) btn.disabled = false;
+            return;
+        }
         const user = auth.currentUser;
-        if (!user) return;
+        if (!user) {
+            if (btn) btn.disabled = false;
+            return;
+        }
         try {
             const token = await user.getIdToken();
             const res = await fetch(`/api/complaints/${complaintId}/reject`, {
@@ -463,7 +564,10 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!res.ok) throw new Error("Failed to reject");
             window.SnapFixToast.show("Complaint has been reopened for further action.", "success");
             loadDashboardComplaints(user);
-        } catch(err) { window.SnapFixToast.show(err.message, "error"); }
+        } catch(err) { 
+            window.SnapFixToast.show(err.message, "error");
+            if (btn) btn.disabled = false;
+        }
     };
     window.escalateComplaint = async function(complaintId) {
         if (!window.SnapFixModal) return;
@@ -514,8 +618,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 method: 'DELETE',
                 headers: { 'Authorization': 'Bearer ' + token }
             });
-            if (!res.ok) throw new Error("Failed to delete complaint. It may already be assigned.");
-            loadDashboardComplaints(user);
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || "Failed to delete complaint. It may already be assigned.");
+            }
+            await loadDashboardComplaints(user);
             window.SnapFixToast.show("Complaint deleted.", "success");
         } catch(err) { window.SnapFixToast.show(err.message, "error"); }
     };
@@ -526,35 +633,31 @@ document.addEventListener('DOMContentLoaded', () => {
     window.editComplaint = function(complaintId) {
         const c = window.currentDashboardComplaints.find(x => x.id === complaintId);
         if (!c) return;
-        window.currentEditComplaintId = complaintId;
         
-        const descInput = document.getElementById('edit-complaint-desc');
-        if (descInput) {
-            descInput.value = c.description || '';
-            document.getElementById('edit-complaint-modal').style.display = 'flex';
-        }
+        window.currentEditComplaintId = c.id;
+        document.getElementById('edit-complaint-desc').value = c.description || '';
+        document.getElementById('edit-complaint-modal').style.display = 'flex';
     };
 
     window.closeEditModal = function() {
-        const modal = document.getElementById('edit-complaint-modal');
-        if (modal) modal.style.display = 'none';
+        document.getElementById('edit-complaint-modal').style.display = 'none';
         window.currentEditComplaintId = null;
     };
 
     window.saveComplaintEdit = async function() {
         if (!window.currentEditComplaintId) return;
-        const newDesc = document.getElementById('edit-complaint-desc').value;
-        const c = window.currentDashboardComplaints.find(x => x.id === window.currentEditComplaintId);
-        if (newDesc.trim() === "" || (c && newDesc === c.description)) {
-            closeEditModal();
+        const desc = document.getElementById('edit-complaint-desc').value.trim();
+        if (!desc) {
+            window.SnapFixToast.show("Description cannot be empty.", "warning");
             return;
         }
-        
-        const btn = document.getElementById('btn-save-edit');
-        if (btn) { btn.disabled = true; btn.innerText = 'Saving...'; }
-        
+
         const user = auth.currentUser;
         if (!user) return;
+
+        const btn = document.getElementById('btn-save-edit');
+        if (btn) { btn.disabled = true; btn.innerText = 'Saving...'; }
+
         try {
             const token = await user.getIdToken();
             const res = await fetch(`/api/complaints/${window.currentEditComplaintId}`, {
@@ -563,12 +666,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     'Authorization': 'Bearer ' + token,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ description: newDesc.trim() })
+                body: JSON.stringify({ description: desc })
             });
-            if (!res.ok) throw new Error("Failed to edit complaint. It may already be assigned or verified.");
+
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || "Failed to edit complaint. It may already be assigned or verified.");
+            }
             
             closeEditModal();
-            loadDashboardComplaints(user);
+            await loadDashboardComplaints(user);
         } catch(err) { 
             window.SnapFixToast.show(err.message, "error"); 
         } finally {
@@ -584,8 +691,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             const token = await user.getIdToken();
-            const response = await fetch('/api/complaints/me', {
-                headers: { 'Authorization': 'Bearer ' + token }
+            const response = await fetch('/api/complaints/me?limit=50&t=' + Date.now(), {
+                headers: { 'Authorization': 'Bearer ' + token },
+                cache: 'no-store'
             });
 
             if (!response.ok) {
@@ -593,7 +701,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(`Failed to fetch complaints (Status: ${response.status}): ${errData.error || response.statusText}`);
             }
 
-            const complaints = await response.json();
+            const data = await response.json();
+            const complaints = Array.isArray(data) ? data : [];
             window.currentDashboardComplaints = complaints;
 
             if (complaints.length === 0) {
@@ -617,7 +726,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="card" style="padding: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius);">
                         <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
                             <span style="font-weight: bold; color: var(--primary-color)">${c.category}</span>
-                            <span style="background: #e2e8f0; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.85rem;">${c.status.toUpperCase()}</span>
+                            <span style="background: #e2e8f0; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.85rem;">${
+                                String(c.status || '').trim().toLowerCase() === 'completed' && String(c.assignment_state || '').trim().toLowerCase() === 'proof_submitted'
+                                ? 'AWAITING VERIFICATION'
+                                : c.status.toUpperCase()
+                            }</span>
                         </div>
                         <h4 style="margin-bottom: 0.5rem;">${c.description || 'No description provided'}</h4>
                         <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 0.5rem;">📍 ${c.location_text || c.location || 'Unknown location'}</p>
@@ -645,8 +758,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             <p style="color: #047857; font-weight: bold; margin-bottom: 0.5rem;">The assigned worker marked this as Completed.</p>
                             ${c.proof_image_url ? `<p style="margin-bottom: 1rem;"><a href="${c.proof_image_url}" target="_blank" style="text-decoration: underline; color: #047857;">View Proof Photo</a></p>` : ''}
                             <div style="display: flex; gap: 1rem;">
-                                <button class="btn btn-primary btn-sm" onclick="confirmComplaint('${c.id}')">Yes, it's resolved</button>
-                                <button class="btn btn-secondary btn-sm" onclick="rejectComplaint('${c.id}')">No, it's not resolved</button>
+                                <button class="btn btn-primary btn-sm" onclick="confirmComplaint('${c.id}', this)">Yes, it's resolved</button>
+                                <button class="btn btn-secondary btn-sm" onclick="rejectComplaint('${c.id}', this)">No, it's not resolved</button>
                             </div>
                         </div>
                         ` : ''}
@@ -662,7 +775,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                         `}
                         
-                        ${!['closed', 'escalated', 'false_report'].includes(c.status) ? `
+                        ${!['closed', 'escalated', 'false_report', 'rejected'].includes(String(c.status || '').trim().toLowerCase()) ? `
                         <div style="margin-top: 0.5rem; margin-bottom: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
                             <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem;">Is this issue severely delayed or being ignored?</p>
                             <button class="btn btn-secondary btn-sm" style="color: var(--danger-color); border-color: var(--danger-color);" onclick="escalateComplaint('${c.id}')">Escalate Issue 🚨</button>

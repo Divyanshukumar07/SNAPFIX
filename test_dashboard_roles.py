@@ -29,7 +29,8 @@ class TestDashboardRoles(unittest.TestCase):
     def test_admin_can_report_complaint(self):
         self.set_mock_user("city_admin")
         import unittest.mock
-        with unittest.mock.patch('routes.db') as mock_db:
+        with unittest.mock.patch('routes.db') as mock_db, \
+             unittest.mock.patch('routes.generate_report_id', return_value="SNF-2026-000001"):
             mock_doc_ref = unittest.mock.Mock()
             mock_doc_ref.id = "new_complaint_id"
             mock_db.collection.return_value.document.return_value = mock_doc_ref

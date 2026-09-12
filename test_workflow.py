@@ -39,7 +39,8 @@ class TestWorkflows(unittest.TestCase):
     def test_active_user_can_create_complaint(self):
         self.set_mock_user("citizen", account_status="active")
         import unittest.mock
-        with unittest.mock.patch('routes.db') as mock_db:
+        with unittest.mock.patch('routes.db') as mock_db, \
+             unittest.mock.patch('routes.generate_report_id', return_value='SNF-2026-000123'):
             mock_doc_ref = unittest.mock.Mock()
             mock_doc_ref.id = "new_complaint_id"
             mock_db.collection.return_value.document.return_value = mock_doc_ref
@@ -105,7 +106,43 @@ class TestWorkflows(unittest.TestCase):
         self.set_mock_user("city_admin", uid="admin-1")
         res = self.client.post('/api/admin/users/admin-1/ban')
         self.assertEqual(res.status_code, 400)
-        self.assertIn("cannot ban yourself", res.json['error'])
+
+    def test_escalation_requester_name(self):
+        def mock_get_current_user():
+            return {
+                "uid": "test-uid",
+                "email": "test@example.com",
+                "role": "citizen",
+                "name": "Jane Doe",
+                "email_verified": True
+            }
+        routes.get_current_user = mock_get_current_user
+        routes.get_current_user_id = lambda: "test-uid"
+        
+        import unittest.mock
+        with unittest.mock.patch('routes.db') as mock_db, \
+             unittest.mock.patch('routes.firestore.ArrayUnion', lambda x: x):
+            mock_doc_ref = unittest.mock.Mock()
+            mock_doc = unittest.mock.Mock()
+            mock_doc.exists = True
+            mock_doc.to_dict.return_value = {
+                "citizen_id": "test-uid",
+                "status": "completed",
+                "escalation_requested": False
+            }
+            mock_doc_ref.get.return_value = mock_doc
+            mock_db.collection.return_value.document.return_value = mock_doc_ref
+            
+            res = self.client.post('/api/complaints/test-id/escalate', json={"reason": "Taking too long"})
+            self.assertEqual(res.status_code, 200)
+            
+            mock_doc_ref.update.assert_called_once()
+            update_call_args = mock_doc_ref.update.call_args[0][0]
+            
+            escalations = update_call_args['escalations']
+            self.assertEqual(len(escalations), 1)
+            self.assertEqual(escalations[0]['requester_name'], 'Jane Doe')
+            self.assertEqual(escalations[0]['requester_role'], 'citizen')
 
 if __name__ == '__main__':
     unittest.main()

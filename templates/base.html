@@ -45,15 +45,19 @@
             <!-- Dynamically populated by auth.js based on auth state -->
             <a href="/public" id="nav-public">Public Wall</a>
             <div id="nav-app-tabs" style="display: inline-flex; gap: 1rem; align-items: center;"></div>
-            <div id="nav-auth-buttons" style="display: inline-flex; gap: 1rem;">
+            <div id="nav-auth-buttons" style="display: inline-flex; gap: 1rem; align-items: center;">
                 <a href="/login" id="nav-login">Login</a>
                 <a href="/register" id="nav-register" class="btn btn-primary">Register</a>
             </div>
+            <!-- Worker Status Menu -->
+            <div id="nav-worker-status-container" style="display: none; position: relative; align-items: center; margin-right: 0.5rem;">
+                <button id="nav-worker-status-btn" class="btn btn-sm" style="background: #e2e8f0; color: #475569; border: none; padding: 0.2rem 0.6rem; border-radius: 99px; font-size: 0.8rem; font-weight: bold; cursor: pointer;">Status</button>
+                <div id="nav-worker-dropdown" style="display: none; position: absolute; top: 110%; right: 0; background: white; border: 1px solid var(--border-color); border-radius: 4px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); width: 180px; z-index: 9999; flex-direction: column; overflow: hidden;">
+                    <!-- Populated by auth.js -->
+                </div>
+            </div>
             <!-- Profile Menu -->
             <div id="nav-profile-menu" style="display: none; position: relative; align-items: center; gap: 0.5rem; cursor: pointer;">
-                <div id="nav-worker-status-container" style="display: none;">
-                    <button id="nav-worker-status-btn" class="btn btn-sm" style="background: #e2e8f0; color: #475569; border: none; padding: 0.2rem 0.6rem; border-radius: 99px; font-size: 0.8rem; font-weight: bold;">Status</button>
-                </div>
                 <div id="nav-profile-circle" style="width: 34px; height: 34px; background: var(--primary-color); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 0.95rem; user-select: none; border: 2px solid white; box-shadow: 0 1px 3px rgba(0,0,0,0.15); transition: transform 0.2s ease, box-shadow 0.2s ease;">
                     U
                 </div>

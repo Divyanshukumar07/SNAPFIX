@@ -216,9 +216,9 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 async function acceptAssignment(complaintId) {
-    if (!auth.currentUser) return;
+    if (!firebase.auth().currentUser) return;
     try {
-        const token = await auth.currentUser.getIdToken();
+        const token = await firebase.auth().currentUser.getIdToken();
         const res = await fetch(`/api/worker/complaints/${complaintId}/assignment`, {
             method: 'PATCH',
             headers: {
@@ -238,9 +238,9 @@ async function acceptAssignment(complaintId) {
     }
 }
 async function startWork(complaintId) {
-    if (!auth.currentUser) return;
+    if (!firebase.auth().currentUser) return;
     try {
-        const token = await auth.currentUser.getIdToken();
+        const token = await firebase.auth().currentUser.getIdToken();
         const res = await fetch(`/api/worker/complaints/${complaintId}/assignment`, {
             method: 'PATCH',
             headers: {
@@ -261,7 +261,7 @@ async function startWork(complaintId) {
 }
 
 async function requestExtension(complaintId) {
-    if (!auth.currentUser) return;
+    if (!firebase.auth().currentUser) return;
     try {
         if (!window.SnapFixModal) return;
         
@@ -288,7 +288,7 @@ async function requestExtension(complaintId) {
             return;
         }
         
-        const token = await auth.currentUser.getIdToken();
+        const token = await firebase.auth().currentUser.getIdToken();
         const res = await fetch(`/api/worker/complaints/${complaintId}/extension`, {
             method: 'POST',
             headers: {
@@ -307,7 +307,7 @@ async function requestExtension(complaintId) {
     }
 }
 async function rejectAssignment(complaintId) {
-    if (!auth.currentUser) return;
+    if (!firebase.auth().currentUser) return;
     try {
         const reason = await window.SnapFixModal.prompt(
             "Reject Assignment",
@@ -320,7 +320,7 @@ async function rejectAssignment(complaintId) {
             return;
         }
 
-        const token = await auth.currentUser.getIdToken();
+        const token = await firebase.auth().currentUser.getIdToken();
         const res = await fetch(`/api/worker/complaints/${complaintId}/assignment`, {
             method: 'PATCH',
             headers: {

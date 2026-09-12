@@ -31,15 +31,12 @@
             </select>
             <select id="filter-state" style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; flex: 1;">
                 <option value="">State ▼</option>
-                <option value="Goa">Goa</option>
-                <option value="Maharashtra">Maharashtra</option>
-                <option value="Karnataka">Karnataka</option>
+                <option value="Goa" selected>Goa</option>
             </select>
             <select id="filter-region" style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; flex: 1;">
                 <option value="">Region ▼</option>
                 <option value="North Goa">North Goa</option>
                 <option value="South Goa">South Goa</option>
-                <option value="Mumbai">Mumbai</option>
             </select>
             <input type="text" id="filter-locality" placeholder="Locality ▼" style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; flex: 1;">
             <button class="btn btn-secondary btn-sm" onclick="clearFilters()">Clear Filters</button>
@@ -199,7 +196,11 @@ async function trackComplaint() {
             <div class="card" style="padding: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius); background: #fff;">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
                     <span style="font-weight: bold; color: var(--primary-color)">${c.category}</span>
-                    <span style="background: #e2e8f0; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.85rem; font-weight: bold;">${(c.status || '').toUpperCase().replace(/_/g, ' ')}</span>
+                    <span style="background: #e2e8f0; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.85rem; font-weight: bold;">${
+                        String(c.status || '').trim().toLowerCase() === 'completed' && String(c.assignment_state || '').trim().toLowerCase() === 'proof_submitted'
+                        ? 'AWAITING VERIFICATION'
+                        : (c.status || '').toUpperCase().replace(/_/g, ' ')
+                    }</span>
                 </div>
                 <h4 style="margin-bottom: 0.5rem;">${c.description || 'No description'}</h4>
                 <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 1rem;">📍 ${(c.location_locality ? c.location_locality + ', ' : '')}${c.location_state || ''}</p>
@@ -274,20 +275,28 @@ function renderComplaints() {
         const date = new Date(c.created_at).toLocaleDateString();
         
         html += `
-            <div class="card" style="padding: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius); background: #fff;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;">
-                    <span style="font-size: 0.8rem; font-weight: bold; color: var(--text-muted);">${c.report_id || 'ID: ' + c.id.substring(0,8)}</span>
-                    <span style="font-weight: bold; color: var(--primary-color)">${c.category}</span>
+            <div class="card" style="padding: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius); background: #fff; display: flex; align-items: center; justify-content: space-between;">
+                <div style="flex: 1; overflow: hidden; padding-right: 1rem;">
+                    <div style="display: flex; justify-content: flex-start; gap: 1rem; margin-bottom: 0.25rem;">
+                        <span style="font-size: 0.8rem; font-weight: bold; color: var(--text-muted);">${c.report_id || 'ID: ' + c.id.substring(0,8)}</span>
+                        <span style="font-weight: bold; color: var(--primary-color)">${c.category}</span>
+                    </div>
+                    <div style="display: flex; justify-content: flex-start; gap: 1rem; margin-bottom: 0.5rem; align-items: center;">
+                        <h4 style="margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%;">${c.description || 'No description'}</h4>
+                        <span style="background: #e2e8f0; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.85rem; font-weight: bold; white-space: nowrap;">${
+                            String(c.status || '').trim().toLowerCase() === 'completed' && String(c.assignment_state || '').trim().toLowerCase() === 'proof_submitted'
+                            ? 'AWAITING VERIFICATION'
+                            : c.status.toUpperCase().replace('_', ' ')
+                        }</span>
+                    </div>
+                    <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 0.5rem;">📍 ${(c.location_locality ? c.location_locality + ', ' : '')}${c.location_text || ''}</p>
+                    
+                    <div style="margin-top: 1rem; border-top: 1px solid #f1f5f9; padding-top: 0.5rem;">
+                        <span style="font-size: 0.9rem; font-weight: bold; color: #d97706;">👍 ${c.support_count} Supporters</span>
+                    </div>
                 </div>
-                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; align-items: center;">
-                    <h4 style="margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%;">${c.description || 'No description'}</h4>
-                    <span style="background: #e2e8f0; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.85rem; font-weight: bold;">${c.status.toUpperCase().replace('_', ' ')}</span>
-                </div>
-                <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 0.5rem;">📍 ${(c.location_locality ? c.location_locality + ', ' : '')}${c.location_text || ''}</p>
-                
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; border-top: 1px solid #f1f5f9; padding-top: 0.5rem;">
-                    <span style="font-size: 0.9rem; font-weight: bold; color: #d97706;">👍 ${c.support_count} Supporters</span>
-                    <button class="btn btn-secondary btn-sm" onclick="openDetails('${c.id}')">View Details</button>
+                <div class="card-actions" style="display: flex; align-items: center; justify-content: flex-end; padding-right: 0.5rem;">
+                    <button class="btn btn-secondary btn-sm" onclick="openDetails('${c.id}')" style="white-space: nowrap;">View Details</button>
                 </div>
             </div>
         `;
@@ -302,7 +311,9 @@ function openDetails(id) {
     currentComplaintId = id;
     
     document.getElementById('modal-category').innerText = c.category;
-    document.getElementById('modal-status').innerText = c.status.toUpperCase().replace('_', ' ');
+    document.getElementById('modal-status').innerText = (String(c.status || '').trim().toLowerCase() === 'completed' && String(c.assignment_state || '').trim().toLowerCase() === 'proof_submitted') 
+        ? 'AWAITING VERIFICATION' 
+        : c.status.toUpperCase().replace('_', ' ');
     document.getElementById('modal-description').innerText = c.description;
     
     let locParts = [];
