@@ -1,5 +1,29 @@
 // SnapFix UI Standard Library
 
+// Global Date Formatter for India Standard Time (IST)
+window.formatIST = function(dateString) {
+    if (!dateString) return 'N/A';
+    try {
+        let normalizedDateStr = dateString;
+        // If the date string lacks a timezone indicator (Z or +HH:MM/-HH:MM) but has time, append Z
+        if (normalizedDateStr.includes('T') && !normalizedDateStr.endsWith('Z') && !normalizedDateStr.match(/[+-]\d{2}:\d{2}$/)) {
+            normalizedDateStr += 'Z';
+        }
+        
+        const d = new Date(normalizedDateStr);
+        if (isNaN(d)) return 'Invalid Date';
+        const opts = { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' };
+        let formatted = new Intl.DateTimeFormat('en-IN', opts).format(d);
+        // Ensure " IST" suffix
+        if (!formatted.includes('IST')) {
+            formatted += ' IST';
+        }
+        return formatted;
+    } catch(e) {
+        return 'Invalid Date';
+    }
+};
+
 window.SnapFixToast = {
     show: function(message, type = 'info') {
         const container = document.getElementById('snapfix-toast-container');

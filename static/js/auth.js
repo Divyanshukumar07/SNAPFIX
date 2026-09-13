@@ -725,7 +725,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             let html = '<div class="complaints-grid" style="display: grid; gap: 1rem;">';
             complaints.forEach(c => {
-                const date = new Date(c.created_at).toLocaleDateString();
+                const date = window.formatIST(c.created_at);
                 const dept = c.department || 'General Services';
                 const priority = c.priority_score || 0;
                 const supporters = c.support_count || 1;
@@ -798,7 +798,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 ${c.history.map(h => `
                                     <div style="margin-bottom: 0.8rem; position: relative;">
                                         <div style="position: absolute; left: -1.4rem; top: 0.2rem; width: 0.6rem; height: 0.6rem; background: var(--primary-color); border-radius: 50%;"></div>
-                                        <div style="font-size: 0.8rem; color: #64748b;">${new Date(h.timestamp).toLocaleString()}</div>
+                                        <div style="font-size: 0.8rem; color: #64748b;">${window.formatIST(h.timestamp)}</div>
                                         <div style="font-weight: bold; font-size: 0.9rem;">${h.action.replace('_', ' ')}</div>
                                         <div style="font-size: 0.85rem;">By: ${h.actor_role.replace('_', ' ')}</div>
                                         ${h.details ? `<div style="font-size: 0.85rem; color: #475569; margin-top: 2px;"><i>${h.details}</i></div>` : ''}

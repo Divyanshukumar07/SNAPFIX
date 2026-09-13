@@ -258,7 +258,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             let html = '<div style="display: flex; flex-direction: column; gap: 1rem;">';
             complaints.forEach(c => {
-                const date = new Date(c.created_at).toLocaleString();
+                const date = window.formatIST(c.created_at);
                 
                 let actionHtml = '';
                 if (c.status === 'pending_verification') {
@@ -376,13 +376,13 @@ document.addEventListener('DOMContentLoaded', () => {
                                     <strong>Requested By:</strong> ${esc.requester_name || 'Unknown'} (${esc.requester_role || 'Unknown'})<br>
                                     <strong>Reason:</strong> ${esc.reason}<br>
                                     <strong>Target Authority:</strong> ${esc.target_authority}<br>
-                                    <strong>Date:</strong> ${new Date(esc.escalated_at).toLocaleString()}<br>
+                                    <strong>Date:</strong> ${window.formatIST(esc.escalated_at)}<br>
                                     <strong>Status:</strong> <span style="font-weight: bold; color: ${esc.status === 'pending' ? '#dc2626' : 'green'};">${(esc.status || 'pending').toUpperCase()}</span>
                                     ${esc.status === 'resolved' ? `<br><strong>Decision:</strong> ${esc.decision}<br><strong>Remarks:</strong> ${esc.remarks}` : ''}
                                     ${canResolve ? `
                                         <div style="margin-top: 0.5rem;">
-                                            <button class="btn btn-primary btn-sm" onclick="handleEscalation('${c.id}', '${esc.id}', 'resolve', \`Report ID: ${c.report_id || 'ID: ' + c.id.substring(0,8)}<br>Category: ${c.category}<br>Requester: ${esc.requester_name || 'Unknown'} (${esc.requester_role || 'Unknown'})<br>Target Authority: ${esc.target_authority}<br>Reason: ${esc.reason}<br>Date: ${new Date(esc.escalated_at).toLocaleString()}\`)">Review Escalation (Resolve)</button>
-                                            <button class="btn btn-danger btn-sm" onclick="handleEscalation('${c.id}', '${esc.id}', 'reject', \`Report ID: ${c.report_id || 'ID: ' + c.id.substring(0,8)}<br>Category: ${c.category}<br>Requester: ${esc.requester_name || 'Unknown'} (${esc.requester_role || 'Unknown'})<br>Target Authority: ${esc.target_authority}<br>Reason: ${esc.reason}<br>Date: ${new Date(esc.escalated_at).toLocaleString()}\`)">Reject / Decline</button>
+                                            <button class="btn btn-primary btn-sm" onclick="handleEscalation('${c.id}', '${esc.id}', 'resolve', \`Report ID: ${c.report_id || 'ID: ' + c.id.substring(0,8)}<br>Category: ${c.category}<br>Requester: ${esc.requester_name || 'Unknown'} (${esc.requester_role || 'Unknown'})<br>Target Authority: ${esc.target_authority}<br>Reason: ${esc.reason}<br>Date: ${window.formatIST(esc.escalated_at)}\`)">Review Escalation (Resolve)</button>
+                                            <button class="btn btn-danger btn-sm" onclick="handleEscalation('${c.id}', '${esc.id}', 'reject', \`Report ID: ${c.report_id || 'ID: ' + c.id.substring(0,8)}<br>Category: ${c.category}<br>Requester: ${esc.requester_name || 'Unknown'} (${esc.requester_role || 'Unknown'})<br>Target Authority: ${esc.target_authority}<br>Reason: ${esc.reason}<br>Date: ${window.formatIST(esc.escalated_at)}\`)">Reject / Decline</button>
                                         </div>
                                     ` : ''}
                                 </div>
@@ -397,7 +397,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 ${c.history.map(h => `
                                     <div style="margin-bottom: 0.8rem; position: relative;">
                                         <div style="position: absolute; left: -1.4rem; top: 0.2rem; width: 0.6rem; height: 0.6rem; background: var(--primary-color); border-radius: 50%;"></div>
-                                        <div style="font-size: 0.8rem; color: #64748b;">${new Date(h.timestamp).toLocaleString()}</div>
+                                        <div style="font-size: 0.8rem; color: #64748b;">${window.formatIST(h.timestamp)}</div>
                                         <div style="font-weight: bold; font-size: 0.9rem;">${h.action.replace('_', ' ')}</div>
                                         <div style="font-size: 0.85rem;">By: ${h.actor_role.replace('_', ' ')} ${h.actor_email ? '(' + h.actor_email + ')' : ''}</div>
                                         ${h.details ? `<div style="font-size: 0.85rem; color: #475569; margin-top: 2px;"><i>${h.details}</i></div>` : ''}

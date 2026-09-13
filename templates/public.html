@@ -182,7 +182,7 @@ async function trackComplaint() {
                 timelineHtml += `
                     <div style="margin-bottom: 1rem; position: relative;">
                         <div style="position: absolute; left: -1.4rem; top: 0.2rem; width: 0.6rem; height: 0.6rem; background: var(--primary-color); border-radius: 50%;"></div>
-                        <div style="font-size: 0.8rem; color: #64748b;">${new Date(h.timestamp).toLocaleString()}</div>
+                        <div style="font-size: 0.8rem; color: #64748b;">${window.formatIST(h.timestamp)}</div>
                         <div style="font-weight: bold;">${h.action.replace(/_/g, ' ')}</div>
                     </div>
                 `;
@@ -272,7 +272,7 @@ function renderComplaints() {
     
     let html = '';
     filtered.forEach(c => {
-        const date = new Date(c.created_at).toLocaleDateString();
+        const date = window.formatIST(c.created_at);
         
         html += `
             <div class="card" style="padding: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius); background: #fff; display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
@@ -325,7 +325,7 @@ function openDetails(id) {
     if (locParts.length > 0) fullLoc = locParts.join(', ') + ' - ' + fullLoc;
     
     document.getElementById('modal-location').innerText = fullLoc;
-    document.getElementById('modal-date').innerText = new Date(c.created_at).toLocaleString();
+    document.getElementById('modal-date').innerText = window.formatIST(c.created_at);
     
     if (c.image_url) {
         document.getElementById('modal-image').src = c.image_url;
@@ -342,7 +342,7 @@ function openDetails(id) {
         timelineContentEl.innerHTML = c.history.map(h => `
             <div style="margin-bottom: 0.8rem; position: relative;">
                 <div style="position: absolute; left: -1.4rem; top: 0.2rem; width: 0.6rem; height: 0.6rem; background: var(--primary-color); border-radius: 50%;"></div>
-                <div style="font-size: 0.8rem; color: #64748b;">${new Date(h.timestamp).toLocaleString()}</div>
+                <div style="font-size: 0.8rem; color: #64748b;">${window.formatIST(h.timestamp)}</div>
                 <div style="font-weight: bold; font-size: 0.9rem;">${h.action.replace('_', ' ')}</div>
                 <div style="font-size: 0.85rem;">By: ${h.actor_role.replace('_', ' ')}</div>
                 ${h.details ? `<div style="font-size: 0.85rem; color: #475569; margin-top: 2px;"><i>${h.details}</i></div>` : ''}
