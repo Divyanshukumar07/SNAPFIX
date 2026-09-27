@@ -41,6 +41,9 @@ def add_complaint_history(event_type, user_dict, prev_status, new_status, detail
     if user_dict.get('email'):
         event['actor_email'] = user_dict.get('email')
         
+    if user_dict.get('name'):
+        event['actor_name'] = user_dict.get('name')
+        
     if user_dict.get('department_id'):
         event['actor_department'] = user_dict.get('department_id')
         
@@ -906,6 +909,185 @@ def admin_reject_complaint_flow(complaint_id):
     
     return jsonify({"message": "Complaint rejected successfully"}), 200
 
+@api.route('/admin/complaints/<complaint_id>/transfer/request', methods=['POST'])
+@require_roles(['department_head'])
+def admin_request_transfer(complaint_id):
+    user = get_current_user()
+    data = request.json or {}
+    target_department = data.get('target_department')
+    reason = data.get('reason')
+    
+    if not target_department or not reason:
+        return jsonify({"error": "Target department and reason are required"}), 400
+        
+    if db is None: return jsonify({"error": "Firestore not configured"}), 500
+        
+    doc_ref = db.collection('complaints').document(complaint_id)
+    doc = doc_ref.get()
+    if not doc.exists: return jsonify({"error": "Not found"}), 404
+        
+    c = doc.to_dict()
+    
+    if c.get('department') != user.get('department_id'):
+        return jsonify({"error": "Forbidden: Department mismatch"}), 403
+        
+    transfer_id = f"TRF-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+    transfer_record = {
+        "transfer_id": transfer_id,
+        "from_department": c.get('department'),
+        "to_department": target_department,
+        "requested_by_uid": user.get('uid'),
+        "requested_by_name": user.get('name', user.get('email', 'unknown')),
+        "requested_by_role": user.get('role'),
+        "request_reason": reason,
+        "status": "TRANSFER_REQUESTED",
+        "requested_at": datetime.utcnow().isoformat()
+    }
+    
+    event = add_complaint_history(
+        'TRANSFER_REQUESTED', user, c.get('status'), c.get('status'), 
+        f"{c.get('department')} -> {target_department}. Reason: {reason}"
+    )
+    
+    doc_ref.update({
+        'transfer_status': 'TRANSFER_REQUESTED',
+        'transfer_target': target_department,
+        'transfer_reason': reason,
+        'transfers': firestore.ArrayUnion([transfer_record]),
+        'history': firestore.ArrayUnion([event]),
+        'updated_at': datetime.utcnow().isoformat()
+    })
+    return jsonify({"message": "Transfer requested successfully"}), 200
+
+@api.route('/admin/complaints/<complaint_id>/transfer/accept', methods=['POST'])
+@require_roles(['department_head'])
+def admin_accept_transfer(complaint_id):
+    user = get_current_user()
+    if db is None: return jsonify({"error": "Firestore not configured"}), 500
+    
+    doc_ref = db.collection('complaints').document(complaint_id)
+    doc = doc_ref.get()
+    if not doc.exists: return jsonify({"error": "Not found"}), 404
+    c = doc.to_dict()
+    
+    if c.get('transfer_status') != 'TRANSFER_REQUESTED':
+        return jsonify({"error": "No pending transfer request"}), 400
+    if c.get('transfer_target') != user.get('department_id'):
+        return jsonify({"error": "Forbidden: You are not the target department"}), 403
+        
+    transfers = c.get('transfers', [])
+    if transfers:
+        transfers[-1]['status'] = 'TRANSFER_ACCEPTED'
+        transfers[-1]['responded_by_uid'] = user.get('uid')
+        transfers[-1]['responded_by_name'] = user.get('name', user.get('email', 'unknown'))
+        transfers[-1]['responded_by_role'] = user.get('role')
+        transfers[-1]['responded_at'] = datetime.utcnow().isoformat()
+        
+    event1 = add_complaint_history('TRANSFER_ACCEPTED', user, c.get('status'), c.get('status'), f"Accepted by {user.get('department_id')}")
+    event2 = add_complaint_history('DEPARTMENT_CHANGED', user, c.get('status'), c.get('status'), f"{c.get('department')} -> {user.get('department_id')}")
+    
+    updates = {
+        'department': user.get('department_id'),
+        'transfer_status': 'TRANSFER_ACCEPTED',
+        'transfer_target': firestore.DELETE_FIELD,
+        'transfer_reason': firestore.DELETE_FIELD,
+        'transfers': transfers,
+        'history': firestore.ArrayUnion([event1, event2]),
+        'updated_at': datetime.utcnow().isoformat()
+    }
+    
+    if c.get('worker_id') or c.get('assigned_workers'):
+        updates['worker_id'] = firestore.DELETE_FIELD
+        updates['assigned_workers'] = []
+        updates['assignment_state'] = firestore.DELETE_FIELD
+        if c.get('status') == 'assigned' or c.get('status') == 'completed':
+            updates['status'] = c.get('pre_assignment_status', 'verified')
+            
+    doc_ref.update(updates)
+    return jsonify({"message": "Transfer accepted successfully"}), 200
+
+@api.route('/admin/complaints/<complaint_id>/transfer/reject', methods=['POST'])
+@require_roles(['department_head'])
+def admin_reject_transfer(complaint_id):
+    user = get_current_user()
+    data = request.json or {}
+    reason = data.get('reason')
+    if not reason: return jsonify({"error": "Reason is required"}), 400
+    if db is None: return jsonify({"error": "Firestore not configured"}), 500
+    
+    doc_ref = db.collection('complaints').document(complaint_id)
+    doc = doc_ref.get()
+    if not doc.exists: return jsonify({"error": "Not found"}), 404
+    c = doc.to_dict()
+    
+    if c.get('transfer_status') != 'TRANSFER_REQUESTED':
+        return jsonify({"error": "No pending transfer request"}), 400
+    if c.get('transfer_target') != user.get('department_id'):
+        return jsonify({"error": "Forbidden: You are not the target department"}), 403
+        
+    transfers = c.get('transfers', [])
+    if transfers:
+        transfers[-1]['status'] = 'TRANSFER_REJECTED'
+        transfers[-1]['responded_by_uid'] = user.get('uid')
+        transfers[-1]['responded_by_name'] = user.get('name', user.get('email', 'unknown'))
+        transfers[-1]['responded_by_role'] = user.get('role')
+        transfers[-1]['response_reason'] = reason
+        transfers[-1]['responded_at'] = datetime.utcnow().isoformat()
+        
+    event = add_complaint_history('TRANSFER_REJECTED', user, c.get('status'), c.get('status'), f"Rejected by {user.get('department_id')}. Reason: {reason}")
+    
+    doc_ref.update({
+        'transfer_status': 'TRANSFER_REJECTED',
+        'transfer_target': firestore.DELETE_FIELD,
+        'transfer_reason': firestore.DELETE_FIELD,
+        'transfers': transfers,
+        'history': firestore.ArrayUnion([event]),
+        'updated_at': datetime.utcnow().isoformat()
+    })
+    return jsonify({"message": "Transfer rejected successfully"}), 200
+
+@api.route('/admin/complaints/<complaint_id>/intervene', methods=['POST'])
+@require_roles(['city_admin', 'main_authority'])
+def admin_intervene(complaint_id):
+    user = get_current_user()
+    data = request.json or {}
+    target_department = data.get('target_department')
+    reason = data.get('reason')
+    
+    if not target_department or not reason:
+        return jsonify({"error": "Target department and reason are required"}), 400
+    if db is None: return jsonify({"error": "Firestore not configured"}), 500
+        
+    doc_ref = db.collection('complaints').document(complaint_id)
+    doc = doc_ref.get()
+    if not doc.exists: return jsonify({"error": "Not found"}), 404
+    c = doc.to_dict()
+    
+    action_name = 'MAIN_AUTHORITY_INTERVENTION' if user.get('role') == 'main_authority' else 'CITY_ADMIN_INTERVENTION'
+    role_display = 'Main Authority' if user.get('role') == 'main_authority' else 'City Admin'
+    
+    event1 = add_complaint_history(action_name, user, c.get('status'), c.get('status'), f"Actor UID: {user.get('uid')}\nPrevious Department: {c.get('department')}\nNew Department: {target_department}\nReason: {reason}")
+    event2 = add_complaint_history('DEPARTMENT_CHANGED', user, c.get('status'), c.get('status'), f"{c.get('department')} -> {target_department}")
+    
+    updates = {
+        'department': target_department,
+        'transfer_status': action_name,
+        'transfer_target': firestore.DELETE_FIELD,
+        'transfer_reason': firestore.DELETE_FIELD,
+        'history': firestore.ArrayUnion([event1, event2]),
+        'updated_at': datetime.utcnow().isoformat()
+    }
+    
+    if c.get('worker_id') or c.get('assigned_workers'):
+        updates['worker_id'] = firestore.DELETE_FIELD
+        updates['assigned_workers'] = []
+        updates['assignment_state'] = firestore.DELETE_FIELD
+        if c.get('status') == 'assigned' or c.get('status') == 'completed':
+            updates['status'] = c.get('pre_assignment_status', 'verified')
+            
+    doc_ref.update(updates)
+    return jsonify({"message": "Intervention successful"}), 200
+
 @api.route('/admin/stats', methods=['GET'])
 @require_roles(['city_admin', 'main_authority', 'department_head'])
 def admin_stats():
@@ -1004,13 +1186,14 @@ def admin_assign_complaint(complaint_id):
             }), 200
     
     # Strict Scoping Check
+    if worker_doc.exists:
+        w_data = worker_doc.to_dict()
+        if w_data.get('department_id') != c.get('department'):
+            return jsonify({"error": "Forbidden: Cannot assign worker from a different department"}), 403
+            
     if user.get('role') == 'department_head':
         if not user.get('department_id') or c.get('department') != user.get('department_id'):
             return jsonify({"error": "Forbidden: Department mismatch for complaint"}), 403
-        if worker_doc.exists:
-            w_data = worker_doc.to_dict()
-            if w_data.get('department_id') != user.get('department_id'):
-                return jsonify({"error": "Forbidden: Cannot assign worker from a different department"}), 403
             
     if c.get('status') not in ['verified', 'reopened']:
         return jsonify({"error": "Complaint must be verified or reopened before assignment"}), 400
@@ -1076,6 +1259,9 @@ def handle_assignment(complaint_id):
     c = doc.to_dict()
     if user['uid'] != c.get('worker_id') and user['uid'] not in c.get('assigned_workers', []):
         return jsonify({"error": "Not assigned to this worker"}), 400
+        
+    if user.get('department_id') != c.get('department'):
+        return jsonify({"error": "Forbidden: Department mismatch"}), 403
         
     if action == 'accept':
         if c.get('assignment_state') != 'pending':
@@ -1178,6 +1364,9 @@ def worker_upload_proof(complaint_id):
     # Strict Worker Scoping Check
     if c.get('worker_id') not in [user['uid'], user.get('email')]:
         return jsonify({"error": "Forbidden: This task is not assigned to you"}), 403
+        
+    if user.get('department_id') != c.get('department'):
+        return jsonify({"error": "Forbidden: Department mismatch"}), 403
         
     if c.get('assignment_state') not in ['accepted', 'in_progress'] and c.get('status') != 'assigned':
         return jsonify({"error": "Complaint must be accepted/in_progress before providing proof"}), 400
@@ -1688,6 +1877,33 @@ def upload_image():
         return jsonify({"url": upload_result.get("secure_url")}), 200
     except Exception as e:
         return jsonify({"error": f"Failed to upload image: {str(e)}"}), 500
+
+@api.route('/admin/department_workers', methods=['GET'])
+@require_roles(['department_head', 'city_admin', 'main_authority'])
+def list_department_workers():
+    user = get_current_user()
+    if db is None: return jsonify([]), 200
+    
+    # If a target_department is specified (e.g. for City Admin intervening)
+    target_dept = request.args.get('department')
+    if user.get('role') == 'department_head':
+        target_dept = user.get('department_id')
+        
+    if not target_dept:
+        return jsonify({"error": "Department not specified or user has no department"}), 400
+        
+    query = db.collection('users').where('role', '==', 'service_worker').where('department_id', '==', target_dept)
+    docs = query.stream()
+    
+    workers = []
+    for doc in docs:
+        w = doc.to_dict()
+        w['id'] = doc.id
+        if w.get('account_status') == 'banned':
+            continue
+        workers.append(w)
+        
+    return jsonify(workers), 200
 
 @api.route('/users', methods=['GET'])
 @require_roles(['main_authority', 'city_admin'])

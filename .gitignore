@@ -7,3 +7,5 @@ __pycache__/
 instance/
 temp.txt
 BUG/
+.pytest_cache/
+testing/

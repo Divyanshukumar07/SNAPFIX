@@ -24,6 +24,68 @@ window.formatIST = function(dateString) {
     }
 };
 
+window.formatDeadline = function(dateString) {
+    if (!dateString) return null;
+    try {
+        let normalizedDateStr = dateString;
+        if (normalizedDateStr.includes('T') && !normalizedDateStr.endsWith('Z') && !normalizedDateStr.match(/[+-]\d{2}:\d{2}$/)) {
+            normalizedDateStr += 'Z';
+        }
+        const d = new Date(normalizedDateStr);
+        if (isNaN(d)) return null;
+        
+        const now = new Date();
+        const diffMs = d - now;
+        const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+        
+        const optsTime = { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit', hour12: true };
+        const optsDate = { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric' };
+        
+        const timeStr = new Intl.DateTimeFormat('en-IN', optsTime).format(d);
+        const dateStr = new Intl.DateTimeFormat('en-IN', optsDate).format(d);
+        
+        let label = dateStr;
+        if (diffDays === 0 || (diffDays === -0 && diffMs < 0 && diffMs > -86400000)) label = 'Today'; // simplistic check
+        else if (diffDays === 1) label = 'Tomorrow';
+        
+        const d_local = new Intl.DateTimeFormat('en-IN', optsDate).format(d);
+        const now_local = new Intl.DateTimeFormat('en-IN', optsDate).format(now);
+        const tmrw = new Date(now.getTime() + 86400000);
+        const tmrw_local = new Intl.DateTimeFormat('en-IN', optsDate).format(tmrw);
+        const yday = new Date(now.getTime() - 86400000);
+        const yday_local = new Intl.DateTimeFormat('en-IN', optsDate).format(yday);
+        
+        if (d_local === now_local) label = 'Today';
+        else if (d_local === tmrw_local) label = 'Tomorrow';
+        else if (d_local === yday_local) label = 'Yesterday';
+        
+        let status = 'ON TIME';
+        let statusColor = '#059669'; // green
+        let statusBg = '#d1fae5';
+        
+        if (diffMs < 0) {
+            status = 'OVERDUE';
+            statusColor = '#dc2626'; // red
+            statusBg = '#fee2e2';
+            const overdueDays = Math.floor(Math.abs(diffMs) / (1000 * 60 * 60 * 24));
+            if (overdueDays > 0) status += ` by ${overdueDays} day${overdueDays > 1 ? 's' : ''}`;
+        } else if (diffDays <= 2) {
+            status = 'DUE SOON';
+            statusColor = '#d97706'; // orange
+            statusBg = '#fef3c7';
+        }
+        
+        return {
+            formatted: `${label} · ${timeStr}`,
+            status: status,
+            color: statusColor,
+            bg: statusBg
+        };
+    } catch(e) {
+        return null;
+    }
+};
+
 window.SnapFixToast = {
     show: function(message, type = 'info') {
         const container = document.getElementById('snapfix-toast-container');
@@ -135,6 +197,37 @@ window.SnapFixModal = {
                 confirmBtn.style.background = 'var(--primary-color)';
                 confirmBtn.style.borderColor = 'var(--primary-color)';
             }
+            
+            document.getElementById('snapfix-modal-overlay').style.display = 'flex';
+        });
+    },
+
+    customForm: function(title, formHTML, confirmText = 'Submit', width = '') {
+        return new Promise((resolve) => {
+            this._resolve = resolve;
+            this._requireInput = false;
+            this._init();
+            
+            document.getElementById('snapfix-modal-title').innerText = title;
+            document.getElementById('snapfix-modal-body').innerHTML = formHTML;
+            
+            const inputContainer = document.getElementById('snapfix-modal-input-container');
+            const inputEl = document.getElementById('snapfix-modal-input');
+            inputContainer.style.display = 'none';
+            inputEl.style.display = 'none';
+            inputEl.value = '';
+            
+            const modalEl = document.querySelector('.snapfix-modal');
+            if (modalEl && width) {
+                modalEl.style.maxWidth = width;
+            } else if (modalEl) {
+                modalEl.style.maxWidth = '400px';
+            }
+            
+            const confirmBtn = document.getElementById('snapfix-modal-confirm');
+            confirmBtn.innerText = confirmText;
+            confirmBtn.style.background = 'var(--primary-color)';
+            confirmBtn.style.borderColor = 'var(--primary-color)';
             
             document.getElementById('snapfix-modal-overlay').style.display = 'flex';
         });

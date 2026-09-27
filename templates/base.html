@@ -35,6 +35,18 @@
     </script>
     
     <script src="{{ url_for('static', filename='js/auth.js') }}" defer></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            if (document.getElementById('auth-guard')) {
+                const main = document.querySelector('main.container') || document.querySelector('.container');
+                if (main) {
+                    main.style.visibility = 'hidden';
+                    main.style.opacity = '0';
+                    main.style.transition = 'opacity 0.2s ease';
+                }
+            }
+        });
+    </script>
 </head>
 <body>
     <nav class="navbar">

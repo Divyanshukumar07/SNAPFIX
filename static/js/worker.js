@@ -139,7 +139,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const complaints = await response.json();
 
             if (complaints.length === 0) {
-                listEl.innerHTML = `<p class="text-muted" style="padding: 2rem 0;">You have no assigned complaints at this time.</p>`;
+                listEl.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">✅</div>
+                        <h4>No assigned tasks</h4>
+                        <p>You have no active complaints assigned to you right now.</p>
+                    </div>
+                `;
                 return;
             }
 
@@ -195,9 +201,15 @@ document.addEventListener('DOMContentLoaded', () => {
                             </div>
                             <span style="font-size:0.85rem; font-weight:bold; padding: 4px 8px; border-radius: 4px; background: #eee;">${c.status.toUpperCase()}</span>
                         </div>
-                        <p style="margin: 0.5rem 0;">${c.description}</p>
+                        <p style="margin: 0.5rem 0; word-break: break-word;">${c.description}</p>
                         <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 0.5rem;">📍 ${c.location_text}</p>
+                        <p class="text-muted" style="font-size: 0.85rem; margin-bottom: 0.5rem;">🕒 ${window.formatIST(c.created_at)}</p>
                         ${c.image_url ? `<p><a href="${c.image_url}" target="_blank" style="color: var(--primary-color); text-decoration: underline; font-size: 0.9rem;">View Issue Photo 📸</a></p>` : ''}
+                        
+                        ${c.expected_completion_deadline ? (function() {
+                            const dl = window.formatDeadline(c.expected_completion_deadline);
+                            return dl ? `<div style="margin-bottom: 1rem; background: ${dl.bg}; color: ${dl.color}; padding: 0.5rem; border-radius: 4px; font-size: 0.85rem; font-weight: bold; border-left: 3px solid ${dl.color};">Deadline: ${dl.formatted} (${dl.status})</div>` : '';
+                        })() : ''}
                         
                         ${actionHtml}
                     </div>

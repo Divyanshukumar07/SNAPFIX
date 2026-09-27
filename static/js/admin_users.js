@@ -58,21 +58,22 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         if (filtered.length === 0) {
-            tableBody.innerHTML = `<tr><td colspan="6" style="padding: 1rem; text-align: center;" class="text-muted">No users found.</td></tr>`;
+            tableBody.innerHTML = `<tr><td colspan="6" style="padding: 4rem 1rem; text-align: center;"><div style="font-size: 3rem; opacity: 0.5; margin-bottom: 1rem;">👥</div><h4 style="margin-bottom: 0.5rem; color: var(--text-main);">No users found</h4><p class="text-muted">Adjust your filters to see more results.</p></td></tr>`;
             return;
         }
         
         tableBody.innerHTML = filtered.map(u => {
+            const displayId = u.uid || u.id;
             const statusColor = u.account_status === 'banned' ? '#dc2626' : '#16a34a';
             const statusBg = u.account_status === 'banned' ? '#fee2e2' : '#dcfce7';
             const banButton = u.account_status === 'banned' 
-                ? `<button class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.9em; margin-top: 0.5rem;" onclick="unbanUser('${u.uid}')">Unban User</button>`
-                : `<button class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.9em; margin-top: 0.5rem;" onclick="banUser('${u.uid}')">Ban User</button>`;
+                ? `<button class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.9em; margin-top: 0.5rem;" onclick="unbanUser('${displayId}')">Unban User</button>`
+                : `<button class="btn btn-danger" style="padding: 0.4rem 0.8rem; font-size: 0.9em; margin-top: 0.5rem;" onclick="banUser('${displayId}')">Ban User</button>`;
             
             return `
-            <tr style="border-bottom: 1px solid #e2e8f0;">
+            <tr style="border-bottom: 1px solid var(--border-color);">
                 <td style="padding: 1rem; font-weight: 500;">${u.email || 'N/A'}</td>
-                <td style="padding: 1rem; font-family: monospace; font-size: 0.9em; color: #64748b;">${u.uid}</td>
+                <td style="padding: 1rem; font-family: monospace; font-size: 0.9em; color: var(--text-muted);">${displayId}</td>
                 <td style="padding: 1rem;">
                     <span style="display: inline-block; padding: 0.2rem 0.6rem; background: #e0e7ff; color: #4338ca; border-radius: 99px; font-size: 0.85em; font-weight: bold;">
                         ${(u.role || 'citizen').toUpperCase()}
@@ -83,12 +84,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         ${(u.account_status || 'active').toUpperCase()}
                     </span>
                 </td>
-                <td style="padding: 1rem; color: #475569;">
+                <td style="padding: 1rem; color: var(--text-color);">
                     <strong>${u.false_report_count || 0}</strong>
                 </td>
                 <td style="padding: 1rem; display: flex; flex-direction: column; gap: 0.2rem;">
-                    <button class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.9em;" onclick="openRoleModal('${u.uid}')">Edit Role</button>
-                    ${u.role === 'service_worker' ? `<button class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.9em; margin-top: 0.5rem;" onclick="viewWorkerPerformance('${u.uid}', '${u.email}')">View Performance</button>` : ''}
+                    <button class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.9em;" onclick="openRoleModal('${displayId}')">Edit Role</button>
+                    ${u.role === 'service_worker' ? `<button class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.9em; margin-top: 0.5rem;" onclick="viewWorkerPerformance('${displayId}', '${u.email || ''}')">View Performance</button>` : ''}
                     ${banButton}
                 </td>
             </tr>
@@ -120,7 +121,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to ban user");
             if (window.SnapFixToast) window.SnapFixToast.show("User banned successfully.", "success");
-            const userObj = allUsers.find(u => u.uid === uid);
+            const userObj = allUsers.find(u => (u.uid || u.id) === uid);
             if (userObj) userObj.account_status = 'banned';
             renderUsers();
         } catch(err) {
@@ -149,7 +150,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to unban user");
             if (window.SnapFixToast) window.SnapFixToast.show("User account status restored to Active.", "success");
-            const userObj = allUsers.find(u => u.uid === uid);
+            const userObj = allUsers.find(u => (u.uid || u.id) === uid);
             if (userObj) userObj.account_status = 'active';
             renderUsers();
         } catch(err) {
@@ -158,10 +159,10 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     window.openRoleModal = function(uid) {
-        const user = allUsers.find(u => u.uid === uid);
+        const user = allUsers.find(u => (u.uid || u.id) === uid);
         if (!user) return;
         
-        document.getElementById('modal-uid').value = user.uid;
+        document.getElementById('modal-uid').value = user.uid || user.id;
         document.getElementById('modal-user-email').innerText = user.email || user.uid;
         roleSelect.value = user.role || 'citizen';
         deptSelect.value = user.department_id || '';

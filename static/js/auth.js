@@ -114,9 +114,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else if (res.status === 403) {
                         const errorData = await res.json();
                         if (errorData.error === 'banned') {
-                            if (window.SnapFixToast) window.SnapFixToast.show("Your account has been banned. Please contact the administrator.", "error");
+                            // Immediately destroy the page content to prevent interaction
+                            document.body.innerHTML = `
+                                <div style="display:flex; height:100vh; align-items:center; justify-content:center; background:#f8fafc; flex-direction:column; padding:2rem; text-align:center;">
+                                    <h1 style="color:#dc2626; margin-bottom:1rem;">Account Banned</h1>
+                                    <p style="font-size:1.1rem; color:#475569; margin-bottom:2rem;">Your account has been banned by an administrator.</p>
+                                    <p style="color:#64748b; font-size:0.9rem;">You are being signed out...</p>
+                                </div>
+                            `;
+                            if (window.SnapFixToast) window.SnapFixToast.show("Your account has been banned.", "error");
                             await firebase.auth().signOut();
-                            setTimeout(() => window.location.href = '/login', 2000);
+                            setTimeout(() => window.location.replace('/login'), 1500);
                             return;
                         }
                     }
@@ -715,57 +723,74 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (complaints.length === 0) {
                 listEl.innerHTML = `
-                    <div style="text-align: center; padding: 2rem 0;">
-                        <p class="text-muted" style="margin-bottom: 1rem;">You haven't reported any civic issues yet.</p>
-                        <p>No complaints yet</p>
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📋</div>
+                        <h4>No complaints yet</h4>
+                        <p>Your reported issues will appear here once you submit one.</p>
+                        <a href="/complaints/new" class="btn btn-primary">Report an Issue</a>
                     </div>
                 `;
                 return;
             }
 
-            let html = '<div class="complaints-grid" style="display: grid; gap: 1rem;">';
+            let html = '<div class="complaints-grid" style="display: grid; gap: 1.5rem;">';
             complaints.forEach(c => {
                 const date = window.formatIST(c.created_at);
                 const dept = c.department || 'General Services';
                 const priority = c.priority_score || 0;
                 const supporters = c.support_count || 1;
                 
+                let rawStatus = String(c.status || '').trim().toLowerCase();
+                let statusText = rawStatus.toUpperCase();
+                let badgeClass = 'badge-neutral';
+                
+                if (rawStatus === 'completed' && String(c.assignment_state || '').trim().toLowerCase() === 'proof_submitted') {
+                    statusText = 'AWAITING VERIFICATION';
+                    badgeClass = 'badge-warning';
+                } else if (rawStatus === 'verified' || rawStatus === 'in_progress') {
+                    badgeClass = 'badge-info';
+                } else if (rawStatus === 'closed') {
+                    badgeClass = 'badge-success';
+                } else if (rawStatus === 'escalated' || rawStatus === 'false_report') {
+                    badgeClass = 'badge-danger';
+                }
+                
                 html += `
-                    <div class="card" style="padding: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius);">
-                        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                            <span style="font-weight: bold; color: var(--primary-color)">${c.category}</span>
-                            <span style="background: #e2e8f0; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.85rem;">${
-                                String(c.status || '').trim().toLowerCase() === 'completed' && String(c.assignment_state || '').trim().toLowerCase() === 'proof_submitted'
-                                ? 'AWAITING VERIFICATION'
-                                : c.status.toUpperCase()
-                            }</span>
-                        </div>
-                        <h4 style="margin-bottom: 0.5rem;">${c.description || 'No description provided'}</h4>
-                        <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 0.5rem;">📍 ${c.location_text || c.location || 'Unknown location'}</p>
+                    <div class="card" style="padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
                         
-                        <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; align-items: center; flex-wrap: wrap;">
-                            <span style="background: #f1f5f9; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">🏢 ${dept}</span>
-                            <span style="background: #f1f5f9; padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.8rem;">👍 ${supporters} Supporters</span>
-                            
-                            <details style="background: #fef3c7; color: #b45309; border-radius: 4px; font-size: 0.8rem; border: 1px solid #fde68a;">
-                                <summary style="padding: 0.2rem 0.5rem; cursor: pointer; font-weight: bold; list-style-type: none;">🔥 Priority: ${priority} ▾</summary>
-                                ${c.priority_breakdown ? `
-                                <div style="padding: 0.5rem; border-top: 1px solid #fde68a; font-family: monospace;">
-                                    Seriousness: +${c.priority_breakdown.seriousness}<br>
-                                    Days Passed: +${c.priority_breakdown.days_passed}<br>
-                                    Supporters : +${c.priority_breakdown.supporters}<br>
-                                    <hr style="margin: 4px 0; border-color: #fcd34d;">
-                                    Total   : ${c.priority_breakdown.total}
-                                </div>
-                                ` : ''}
-                            </details>
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap;">
+                            <div style="font-family: monospace; font-size: 0.9rem; font-weight: 600; color: var(--text-muted);">
+                                ${c.report_id || c.id.substring(0, 8) + '...'}
+                            </div>
+                            <div class="badge ${badgeClass}">
+                                ● ${statusText}
+                            </div>
+                        </div>
+
+                        <h4 style="margin: 0; word-break: break-word; font-size: 1.15rem; color: var(--text-main);">${c.description || 'No description provided'}</h4>
+
+                        <div style="display: flex; flex-direction: column; gap: 0.5rem; color: var(--text-muted); font-size: 0.9rem;">
+                            <div style="display: flex; align-items: flex-start; gap: 0.5rem;">
+                                <span style="font-size: 1.1rem; line-height: 1.2;">📍</span> 
+                                <span style="flex: 1;">${c.location_text || c.location || 'Unknown location'}</span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <span style="font-size: 1.1rem;">🏢</span> ${dept}
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <span style="font-size: 1.1rem;">🕒</span> ${date}
+                            </div>
+                        </div>
+                        
+                        <div style="display: flex; gap: 1rem; align-items: center; margin-top: 0.5rem;">
+                            <span style="font-weight: 600; color: var(--primary-color); font-size: 0.9rem;">👍 ${supporters} supporters</span>
                         </div>
                         
                         ${c.status === 'completed' ? `
-                        <div style="background: #ecfdf5; border: 1px solid #10b981; padding: 1rem; border-radius: 4px; margin-bottom: 1rem;">
+                        <div style="background: #ecfdf5; border: 1px solid #10b981; padding: 1rem; border-radius: var(--radius); margin-top: 0.5rem;">
                             <p style="color: #047857; font-weight: bold; margin-bottom: 0.5rem;">The assigned worker marked this as Completed.</p>
                             ${c.proof_image_url ? `<p style="margin-bottom: 1rem;"><a href="${c.proof_image_url}" target="_blank" style="text-decoration: underline; color: #047857;">View Proof Photo</a></p>` : ''}
-                            <div style="display: flex; gap: 1rem;">
+                            <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
                                 <button class="btn btn-primary btn-sm" onclick="confirmComplaint('${c.id}', this)">Yes, it's resolved</button>
                                 <button class="btn btn-secondary btn-sm" onclick="rejectComplaint('${c.id}', this)">No, it's not resolved</button>
                             </div>
@@ -773,37 +798,37 @@ document.addEventListener('DOMContentLoaded', () => {
                         ` : ''}
                         
                         ${c.status === 'pending_verification' ? `
-                        <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
-                            <button class="btn btn-secondary btn-sm" onclick="editComplaint('${c.id}')">Edit</button>
-                            <button class="btn btn-secondary btn-sm" style="color: var(--danger-color); border-color: var(--danger-color);" onclick="deleteComplaint('${c.id}')">Delete</button>
+                        <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem; flex-wrap: wrap; border-top: 1px solid var(--border-light); padding-top: 1rem;">
+                            <button class="btn btn-secondary btn-sm" onclick="editComplaint('${c.id}')">Edit Complaint</button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteComplaint('${c.id}')">Delete</button>
                         </div>
                         ` : ''}
                         
                         ${!['closed', 'escalated', 'false_report', 'rejected'].includes(String(c.status || '').trim().toLowerCase()) ? `
-                        <div style="margin-top: 0.5rem; margin-bottom: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
-                            <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem;">Is this issue severely delayed or being ignored?</p>
-                            <button class="btn btn-secondary btn-sm" style="color: var(--danger-color); border-color: var(--danger-color);" onclick="escalateComplaint('${c.id}')">Escalate Issue 🚨</button>
+                        <div style="margin-top: 0.5rem; border-top: 1px solid var(--border-light); padding-top: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                            <span style="font-size: 0.85rem; color: var(--text-muted);">Issue severely delayed?</span>
+                            <button class="btn btn-danger btn-sm" onclick="escalateComplaint('${c.id}')">Escalate Issue 🚨</button>
                         </div>
                         ` : ''}
-
-                        <div style="display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-muted); border-top: 1px solid var(--border-color); padding-top: 0.5rem;">
-                            <span>ID: ${c.report_id || c.id.substring(0, 8) + '...'}</span>
-                            <span>Reported: ${date}</span>
-                        </div>
                         
                         ${c.history && c.history.length > 0 ? `
-                        <details style="margin-top: 1rem; border-top: 1px dashed #cbd5e1; padding-top: 1rem;">
-                            <summary style="cursor: pointer; font-weight: bold; color: #475569;">Activity Timeline (${c.history.length})</summary>
-                            <div style="margin-top: 0.5rem; padding-left: 1rem; border-left: 2px solid #e2e8f0;">
-                                ${c.history.map(h => `
-                                    <div style="margin-bottom: 0.8rem; position: relative;">
-                                        <div style="position: absolute; left: -1.4rem; top: 0.2rem; width: 0.6rem; height: 0.6rem; background: var(--primary-color); border-radius: 50%;"></div>
-                                        <div style="font-size: 0.8rem; color: #64748b;">${window.formatIST(h.timestamp)}</div>
-                                        <div style="font-weight: bold; font-size: 0.9rem;">${h.action.replace('_', ' ')}</div>
-                                        <div style="font-size: 0.85rem;">By: ${h.actor_role.replace('_', ' ')}</div>
-                                        ${h.details ? `<div style="font-size: 0.85rem; color: #475569; margin-top: 2px;"><i>${h.details}</i></div>` : ''}
+                        <details style="margin-top: 0.5rem; border-top: 1px dashed var(--border-color); padding-top: 1rem;">
+                            <summary style="cursor: pointer; font-weight: 600; color: var(--primary-color); outline: none;">View Activity Timeline</summary>
+                            <div style="margin-top: 1rem; margin-left: 0.5rem;">
+                                ${c.history.map(h => {
+                                    let cssClass = 'timeline-event';
+                                    if (h.action.includes('INTERVENTION')) cssClass += ' intervention';
+                                    if (h.action.includes('TRANSFER')) cssClass += ' transfer';
+                                    const actorDisplay = h.actor_name ? `${h.actor_role.replace(/_/g, ' ')} &mdash; ${h.actor_name}` : h.actor_role.replace(/_/g, ' ');
+                                    return `
+                                    <div class="${cssClass}">
+                                        <div class="timeline-time">${window.formatIST(h.timestamp)}</div>
+                                        <div class="timeline-action">${h.action.replace(/_/g, ' ')}</div>
+                                        <div class="timeline-actor">By: ${actorDisplay}</div>
+                                        ${h.details ? `<div class="timeline-details">${h.details}</div>` : ''}
                                     </div>
-                                `).join('')}
+                                    `;
+                                }).join('')}
                             </div>
                         </details>
                         ` : ''}

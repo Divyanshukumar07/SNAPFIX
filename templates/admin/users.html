@@ -23,20 +23,20 @@
 
 <div id="users-error" class="alert alert-error" style="display: none;"></div>
 
-<div style="overflow-x: auto;">
-    <table style="width: 100%; border-collapse: collapse; text-align: left; background: white; border-radius: var(--border-radius); box-shadow: var(--box-shadow);">
+<div class="card" style="padding: 0; overflow-x: auto; margin-bottom: 2rem;">
+    <table style="width: 100%; border-collapse: collapse; text-align: left;">
         <thead>
-            <tr style="background: #f1f5f9; border-bottom: 2px solid #e2e8f0;">
-                <th style="padding: 1rem;">Email</th>
-                <th style="padding: 1rem;">UID</th>
-                <th style="padding: 1rem;">Role</th>
-                <th style="padding: 1rem;">Account Status</th>
-                <th style="padding: 1rem;">False Reports</th>
-                <th style="padding: 1rem;">Actions</th>
+            <tr style="background: var(--bg-main); border-bottom: 1px solid var(--border-color);">
+                <th style="padding: 1rem 1.5rem; font-size: 0.85rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Email</th>
+                <th style="padding: 1rem 1.5rem; font-size: 0.85rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">UID</th>
+                <th style="padding: 1rem 1.5rem; font-size: 0.85rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Role</th>
+                <th style="padding: 1rem 1.5rem; font-size: 0.85rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Account Status</th>
+                <th style="padding: 1rem 1.5rem; font-size: 0.85rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">False Reports</th>
+                <th style="padding: 1rem 1.5rem; font-size: 0.85rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Actions</th>
             </tr>
         </thead>
         <tbody id="users-table-body">
-            <tr><td colspan="5" style="padding: 1rem; text-align: center;" class="text-muted">Loading users...</td></tr>
+            <tr><td colspan="6" style="padding: 2rem; text-align: center;" class="text-muted"><div class="skeleton" style="height: 40px; width: 100%;"></div></td></tr>
         </tbody>
     </table>
 </div>

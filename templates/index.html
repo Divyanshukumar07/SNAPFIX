@@ -1,28 +1,415 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="hero">
-    <h1>Report Issues. Track Progress. Improve Your City.</h1>
-    <p>A transparent platform connecting citizens directly with city departments to resolve civic issues faster.</p>
+<style>
+    /* Premium Landing Page Styles */
+    .landing-hero {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 3rem;
+        padding: 4rem 2rem;
+        background: linear-gradient(135deg, var(--bg-main) 0%, #f1f5f9 100%);
+        border-radius: var(--radius-lg);
+        margin-bottom: 4rem;
+        box-shadow: inset 0 2px 10px rgba(0,0,0,0.02);
+        animation: fade-up 0.8s ease-out;
+    }
+
+    .hero-content {
+        flex: 1;
+        max-width: 600px;
+    }
+
+    .hero-content h1 {
+        font-size: 3.5rem;
+        line-height: 1.1;
+        color: var(--primary-color);
+        margin-bottom: 1.5rem;
+        letter-spacing: -0.03em;
+        animation: slide-up 0.6s ease-out;
+    }
+
+    .hero-content p {
+        font-size: 1.2rem;
+        color: var(--text-muted);
+        margin-bottom: 2rem;
+        line-height: 1.6;
+        animation: slide-up 0.8s ease-out;
+    }
+
+    .hero-actions {
+        display: flex;
+        gap: 1rem;
+        animation: slide-up 1s ease-out;
+    }
+
+    .hero-visual {
+        flex: 1;
+        display: flex;
+        justify-content: center;
+        animation: fade-in 1.2s ease-out;
+    }
+
+    /* CSS UI Mockup Wrapper */
+    .hero-dashboard-wrapper {
+        perspective: 1200px;
+        transform: rotateY(-5deg) rotateZ(-2deg);
+        transition: transform 0.5s ease;
+        transform-style: preserve-3d;
+        display: inline-block;
+        width: 100%;
+        max-width: 380px;
+    }
     
-    <div class="hero-actions">
-        <a href="/complaints/new" class="btn btn-primary btn-large">Report an Issue</a>
-        <a href="/dashboard" class="btn btn-secondary btn-large">Track Complaint</a>
+    .hero-dashboard-wrapper:hover {
+        transform: rotateY(0deg) rotateZ(0deg) translateY(-4px) scale(1.02);
+    }
+
+    /* CSS UI Mockup */
+    .ui-mockup {
+        background: #fff;
+        border-radius: 16px;
+        box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        width: 100%;
+        overflow: hidden;
+        border: 1px solid var(--border-color);
+        transition: box-shadow 0.5s ease;
+        animation: float-mockup 5s ease-in-out infinite;
+    }
+    
+    .hero-dashboard-wrapper:hover .ui-mockup {
+        box-shadow: 0 30px 60px rgba(0,0,0,0.15);
+    }
+
+    .ui-header {
+        background: var(--primary-color);
+        color: #fff;
+        padding: 1rem;
+        font-weight: bold;
+        display: flex;
+        justify-content: space-between;
+    }
+
+    .ui-body {
+        padding: 1.5rem;
+    }
+
+    .ui-card {
+        background: #f8fafc;
+        border: 1px solid var(--border-color);
+        padding: 1rem;
+        border-radius: 8px;
+        margin-bottom: 1rem;
+    }
+
+    /* Enhanced Features Grid */
+    .premium-features {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 2rem;
+        margin-bottom: 4rem;
+    }
+
+    .premium-card {
+        background: #fff;
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 2rem;
+        box-shadow: var(--shadow-sm);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+        text-align: center;
+    }
+
+    .premium-card:hover {
+        transform: translateY(-8px);
+        box-shadow: var(--shadow-lg);
+    }
+
+    .card-icon {
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+        display: inline-block;
+        background: #f1f5f9;
+        width: 80px;
+        height: 80px;
+        line-height: 80px;
+        border-radius: 50%;
+        color: var(--primary-color);
+    }
+
+    /* Lifecycle Section */
+    .lifecycle-section {
+        background: #fff;
+        border-radius: var(--radius-lg);
+        padding: 4rem 2rem;
+        text-align: center;
+        margin-bottom: 4rem;
+        border: 1px solid var(--border-color);
+        box-shadow: var(--shadow-sm);
+    }
+
+    .lifecycle-steps {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-top: 2rem;
+    }
+
+    .lifecycle-step {
+        background: #f8fafc;
+        border: 1px solid var(--border-color);
+        padding: 1rem 1.5rem;
+        border-radius: 30px;
+        font-weight: bold;
+        color: var(--text-main);
+        transition: all 0.2s ease;
+    }
+    
+    .lifecycle-step:hover {
+        background: var(--primary-color);
+        color: #fff;
+        transform: translateY(-2px);
+    }
+
+    .lifecycle-arrow {
+        color: var(--text-muted);
+        font-size: 1.2rem;
+    }
+
+    /* Trust Section */
+    .trust-section {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4rem;
+        background: var(--primary-color);
+        color: #fff;
+        border-radius: var(--radius-lg);
+        padding: 4rem 3rem;
+        margin-bottom: 4rem;
+        flex-wrap: wrap;
+    }
+
+    .trust-content {
+        flex: 1;
+        min-width: 300px;
+    }
+
+    .trust-timeline {
+        flex: 1;
+        min-width: 300px;
+        background: rgba(255,255,255,0.1);
+        padding: 2rem;
+        border-radius: 12px;
+    }
+
+    .mini-timeline-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 1rem;
+        margin-bottom: 1rem;
+        position: relative;
+    }
+
+    .mini-timeline-item:not(:last-child)::before {
+        content: '';
+        position: absolute;
+        left: 9px;
+        top: 24px;
+        bottom: -16px;
+        width: 2px;
+        background: rgba(255,255,255,0.3);
+    }
+
+    .mini-timeline-dot {
+        width: 20px;
+        height: 20px;
+        background: #fff;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--primary-color);
+        font-size: 0.7rem;
+        font-weight: bold;
+        flex-shrink: 0;
+        margin-top: 2px;
+    }
+
+    /* Animations */
+    @keyframes slide-up {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fade-up {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fade-in {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+
+    @keyframes float-mockup {
+        0% { transform: rotateY(0deg) rotateZ(0deg) translateY(0px); }
+        50% { transform: rotateY(1deg) rotateZ(0.5deg) translateY(-6px); }
+        100% { transform: rotateY(0deg) rotateZ(0deg) translateY(0px); }
+    }
+
+    @media (max-width: 768px) {
+        .hero-dashboard-wrapper {
+            transform: rotateY(-2deg) rotateZ(-1deg);
+        }
+        .landing-hero {
+            flex-direction: column;
+            text-align: center;
+            padding: 2rem 1rem;
+        }
+        .hero-actions {
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .trust-section {
+            padding: 2rem 1rem;
+            text-align: center;
+        }
+        .trust-timeline {
+            text-align: left;
+        }
+        .hero-content h1 {
+            font-size: 2.5rem;
+        }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        * {
+            animation: none !important;
+            transition: none !important;
+        }
+        .ui-mockup {
+            animation: none !important;
+            transform: translateY(0) !important;
+        }
+        .hero-dashboard-wrapper:hover {
+            transform: rotateY(-5deg) rotateZ(-2deg) !important;
+        }
+    }
+</style>
+
+<!-- Hero Section -->
+<div class="landing-hero">
+    <div class="hero-content">
+        <h1 style="font-size: 3rem; letter-spacing: -1px;">Because reporting a pothole shouldn't feel like shouting into the void.</h1>
+        <p>SnapFix connects citizens with the right department, tracks every step, and puts accountability where it belongs.</p>
+        
+        <div class="hero-actions">
+            <a href="/complaints/new" class="btn btn-primary btn-large" style="border-radius: 30px;">Report an Issue</a>
+            <a href="/dashboard" class="btn btn-secondary btn-large" style="border-radius: 30px;">Track Complaint</a>
+        </div>
+    </div>
+    
+    <div class="hero-visual">
+        <div class="hero-dashboard-wrapper">
+            <div class="ui-mockup">
+                <div class="ui-header">
+                    <span>SnapFix Dashboard</span>
+                    <span>👤</span>
+                </div>
+                <div class="ui-body">
+                    <div class="ui-card">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <strong>🛣 Pothole on Main St</strong>
+                            <span class="badge badge-success" style="background: #10b981; color: white;">VERIFIED ✓</span>
+                        </div>
+                        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 12px;">Department: Roads</p>
+                        <div style="background: #e2e8f0; height: 8px; border-radius: 4px; overflow: hidden;">
+                            <div style="background: var(--primary-color); width: 75%; height: 100%;"></div>
+                        </div>
+                        <p style="text-align: right; font-size: 0.8rem; margin-top: 4px; color: var(--primary-color);">Status: IN PROGRESS</p>
+                    </div>
+                    <div class="ui-card" style="opacity: 0.6;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                            <strong>💡 Broken Streetlight</strong>
+                            <span class="badge" style="background: #64748b; color: white;">ASSIGNED</span>
+                        </div>
+                        <p style="color: var(--text-muted); font-size: 0.9rem;">Department: Electricity</p>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
-<div class="features-grid">
-    <div class="feature-card">
-        <h3>📍 Smart Routing</h3>
-        <p>Your complaint is automatically routed to the correct municipal department based on the issue category.</p>
+<!-- Features Grid -->
+<div class="premium-features">
+    <div class="premium-card">
+        <div class="card-icon">📍</div>
+        <h3>Smart Routing</h3>
+        <p class="text-muted" style="margin-top: 1rem;">Complaints automatically reach the correct municipal department based on the issue category.</p>
     </div>
-    <div class="feature-card">
-        <h3>🔍 Transparent Tracking</h3>
-        <p>See exactly who is working on your complaint and track its status from submission to resolution.</p>
+    <div class="premium-card">
+        <div class="card-icon">🔍</div>
+        <h3>Transparent Tracking</h3>
+        <p class="text-muted" style="margin-top: 1rem;">Track exactly who is working on your complaint from submission to final resolution.</p>
     </div>
-    <div class="feature-card">
-        <h3>✅ Verified Resolution</h3>
-        <p>Workers must upload photo proof of the completed job, and you confirm if it was actually fixed.</p>
+    <div class="premium-card">
+        <div class="card-icon">✅</div>
+        <h3>Verified Resolution</h3>
+        <p class="text-muted" style="margin-top: 1rem;">Workers upload photo proof, and citizens confirm whether the work was actually completed.</p>
+    </div>
+</div>
+
+<!-- Lifecycle Section -->
+<div class="lifecycle-section">
+    <h2 style="color: var(--primary-color); margin-bottom: 1rem;">The SnapFix Lifecycle</h2>
+    <p class="text-muted" style="max-width: 600px; margin: 0 auto;">Every complaint follows a strict, accountable pathway ensuring nothing gets lost in bureaucracy.</p>
+    
+    <div class="lifecycle-steps">
+        <div class="lifecycle-step">📝 Report</div>
+        <div class="lifecycle-arrow">➔</div>
+        <div class="lifecycle-step">👁 Verify</div>
+        <div class="lifecycle-arrow">➔</div>
+        <div class="lifecycle-step">👷 Assign</div>
+        <div class="lifecycle-arrow">➔</div>
+        <div class="lifecycle-step">🔧 Solve</div>
+        <div class="lifecycle-arrow">➔</div>
+        <div class="lifecycle-step">📸 Prove</div>
+        <div class="lifecycle-arrow">➔</div>
+        <div class="lifecycle-step" style="background: #10b981; color: white;">✓ Confirm</div>
+    </div>
+</div>
+
+<!-- Trust Section -->
+<div class="trust-section">
+    <div class="trust-content">
+        <h2 style="margin-bottom: 1rem; font-size: 2.5rem;">Every action leaves a trace.</h2>
+        <p style="font-size: 1.1rem; line-height: 1.6; opacity: 0.9;">SnapFix brings true traceable accountability to civic management. From the moment an issue is reported, an immutable timeline tracks every status change, department transfer, and intervention.</p>
+        <a href="/public" class="btn" style="margin-top: 2rem; background: #fff; color: var(--primary-color); border: none; font-weight: bold; padding: 0.75rem 2rem; border-radius: 30px;">View Public Wall</a>
+    </div>
+    <div class="trust-timeline">
+        <div class="mini-timeline-item">
+            <div class="mini-timeline-dot">●</div>
+            <div>Complaint Reported</div>
+        </div>
+        <div class="mini-timeline-item">
+            <div class="mini-timeline-dot">●</div>
+            <div>Department Verified</div>
+        </div>
+        <div class="mini-timeline-item">
+            <div class="mini-timeline-dot">●</div>
+            <div>Worker Assigned</div>
+        </div>
+        <div class="mini-timeline-item">
+            <div class="mini-timeline-dot">●</div>
+            <div>Proof Submitted</div>
+        </div>
+        <div class="mini-timeline-item">
+            <div class="mini-timeline-dot" style="background: #10b981; color: white;">✓</div>
+            <div style="font-weight: bold;">Citizen Confirmed</div>
+        </div>
     </div>
 </div>
 {% endblock %}

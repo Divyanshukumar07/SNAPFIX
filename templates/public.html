@@ -16,83 +16,89 @@
 
 <!-- Dynamic content wrappers -->
 <div id="filters-container">
-    <div class="card" style="padding: 1rem; margin-bottom: 1.5rem; background: #f8fafc; border: 1px dashed var(--border-color);">
-        <div style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
-            <input type="text" id="search-input" placeholder="Search complaints..." style="flex: 1; padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; min-width: 0;">
+    <div class="card" style="padding: 1.5rem; margin-bottom: 2rem; background: var(--bg-card); border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);">
+        <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+            <input type="text" id="search-input" class="form-control" placeholder="Search civic issues..." style="flex: 1;">
         </div>
-        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
-            <select id="filter-category" style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; flex: 1 1 140px; min-width: 0;">
-                <option value="">Category ▼</option>
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
+            <select id="filter-category" class="form-control" style="flex: 1 1 160px;">
+                <option value="">All Categories</option>
                 <option value="Garbage/Waste">Garbage/Waste</option>
                 <option value="Streetlight/Electrical">Streetlight/Electrical</option>
                 <option value="Roads">Roads & Potholes</option>
                 <option value="Water/Sewage">Water/Sewage</option>
                 <option value="Other">Other</option>
             </select>
-            <select id="filter-state" style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; flex: 1 1 100px; min-width: 0;">
-                <option value="">State ▼</option>
+            <select id="filter-state" class="form-control" style="flex: 1 1 120px;">
+                <option value="">State</option>
                 <option value="Goa" selected>Goa</option>
             </select>
-            <select id="filter-region" style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; flex: 1 1 120px; min-width: 0;">
-                <option value="">Region ▼</option>
+            <select id="filter-region" class="form-control" style="flex: 1 1 140px;">
+                <option value="">Region</option>
                 <option value="North Goa">North Goa</option>
                 <option value="South Goa">South Goa</option>
             </select>
-            <input type="text" id="filter-locality" placeholder="Locality ▼" style="padding: 0.5rem; border: 1px solid var(--border-color); border-radius: 4px; flex: 1 1 120px; min-width: 0;">
-            <button class="btn btn-secondary btn-sm" onclick="clearFilters()" style="flex: 0 0 auto; white-space: nowrap; padding: 0.5rem 1rem;">Clear Filters</button>
+            <input type="text" id="filter-locality" class="form-control" placeholder="Locality" style="flex: 1 1 140px;">
+            <button class="btn btn-secondary" onclick="clearFilters()" style="flex: 0 0 auto;">Clear Filters</button>
         </div>
     </div>
 </div>
 
-<div id="track-container" style="display: none; margin-bottom: 1.5rem;">
-    <div class="card" style="padding: 2rem; text-align: center; background: #f8fafc; border: 1px dashed var(--border-color);">
-        <h3 style="margin-bottom: 1rem;">Track Your Report</h3>
+<div id="track-container" style="display: none; margin-bottom: 2rem;">
+    <div class="empty-state">
+        <h4 style="margin-bottom: 0.5rem;">Track Your Report</h4>
         <p class="text-muted" style="margin-bottom: 1.5rem;">Enter your unique Report ID to check its real-time status and timeline.</p>
         <div style="display: flex; gap: 0.5rem; max-width: 500px; margin: 0 auto; flex-wrap: wrap;">
-            <input type="text" id="track-input" placeholder="e.g. SNF-2026-000184" style="flex: 1 1 200px; padding: 0.75rem; border: 1px solid var(--border-color); border-radius: 4px; font-size: 1.1rem; text-transform: uppercase; min-width: 0;">
-            <button class="btn btn-primary" onclick="trackComplaint()" style="flex: 0 0 auto;">Track</button>
+            <input type="text" id="track-input" class="form-control" placeholder="e.g. SNF-2026-000184" style="flex: 1 1 200px; text-transform: uppercase;">
+            <button class="btn btn-primary" onclick="trackComplaint()">Track</button>
         </div>
         <div id="track-result" style="margin-top: 2rem; text-align: left;"></div>
     </div>
 </div>
 
-<div class="card mt-2" style="border: none; box-shadow: none; padding: 0;">
-    <div id="public-complaints-list" class="complaints-grid" style="display: grid; gap: 1rem;">
-        <p class="text-muted">Loading public issues...</p>
+<div style="border: none; box-shadow: none; padding: 0;">
+    <div id="public-complaints-list" class="complaints-grid" style="display: grid; gap: 1.5rem;">
+        <div class="skeleton" style="height: 160px; width: 100%;"></div>
+        <div class="skeleton" style="height: 160px; width: 100%;"></div>
     </div>
 </div>
 
 <!-- Details Modal -->
-<div id="details-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
-    <div class="card" style="width: 90%; max-width: 600px; max-height: 90vh; overflow-y: auto; position: relative;">
-        <button onclick="closeDetails()" style="position: absolute; top: 1rem; right: 1rem; background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
-        <h3 id="modal-category" style="margin-bottom: 0.5rem;">Category</h3>
-        <p><span id="modal-status" style="background: #e2e8f0; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.85rem; font-weight: bold;">STATUS</span></p>
-        
-        <div style="margin: 1rem 0; padding: 1rem; background: #f8fafc; border-radius: 8px;">
-            <p><strong>Description:</strong></p>
-            <p id="modal-description" style="margin-top: 0.5rem;"></p>
+<div id="details-modal" class="snapfix-modal-overlay" style="display: none;">
+    <div class="snapfix-modal">
+        <div class="snapfix-modal-header">
+            <h3 id="modal-category">Category</h3>
+            <button class="snapfix-modal-close" onclick="closeDetails()">&times;</button>
+        </div>
+        <div class="snapfix-modal-body">
+            <p style="margin-bottom: 1rem;"><span id="modal-status" class="badge badge-info">STATUS</span></p>
+            
+            <div style="margin: 1rem 0; padding: 1rem; background: var(--bg-main); border: 1px solid var(--border-light); border-radius: var(--radius);">
+                <p><strong>Description:</strong></p>
+                <p id="modal-description" style="margin-top: 0.5rem;"></p>
+            </div>
+            
+            <p class="text-muted" style="margin-bottom: 0.5rem;">📍 <span id="modal-location"></span></p>
+            <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 0.5rem;">Reported on: <span id="modal-date"></span></p>
+            <p id="modal-deadline-container" class="text-muted" style="font-size: 0.9rem; margin-bottom: 1rem; display: none;">Deadline: <span id="modal-deadline"></span></p>
+            
+            <div id="modal-image-container" style="display: none; margin-bottom: 1rem;">
+                <p style="margin-bottom: 0.5rem;"><strong>Evidence:</strong></p>
+                <img id="modal-image" src="" style="max-width: 100%; border-radius: var(--radius); border: 1px solid var(--border-color);">
+            </div>
+            
+            <div id="modal-timeline" style="margin-bottom: 1rem; display: none;">
+                <details style="border-top: 1px dashed var(--border-color); padding-top: 1rem;">
+                    <summary style="cursor: pointer; font-weight: bold; color: var(--text-main);">Activity Timeline</summary>
+                    <div id="modal-timeline-content" style="margin-top: 1rem; margin-left: 0.5rem;">
+                    </div>
+                </details>
+            </div>
         </div>
         
-        <p class="text-muted" style="margin-bottom: 0.5rem;">📍 <span id="modal-location"></span></p>
-        <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 1rem;">Reported on: <span id="modal-date"></span></p>
-        
-        <div id="modal-image-container" style="display: none; margin-bottom: 1rem;">
-            <p><strong>Evidence:</strong></p>
-            <img id="modal-image" src="" style="max-width: 100%; border-radius: 8px; border: 1px solid var(--border-color);">
-        </div>
-        
-        <div id="modal-timeline" style="margin-bottom: 1rem; display: none;">
-            <details style="border-top: 1px dashed #cbd5e1; padding-top: 1rem;">
-                <summary style="cursor: pointer; font-weight: bold; color: #475569;">Activity Timeline</summary>
-                <div id="modal-timeline-content" style="margin-top: 0.5rem; padding-left: 1rem; border-left: 2px solid #e2e8f0;">
-                </div>
-            </details>
-        </div>
-        
-        <div style="display: flex; gap: 1rem; align-items: center; margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
-            <span style="font-weight: bold;">👍 <span id="modal-support-count">0</span> Supporters</span>
-            <button id="modal-support-btn" class="btn btn-primary" onclick="supportCurrentComplaint()">Support</button>
+        <div class="snapfix-modal-footer" style="justify-content: space-between;">
+            <span style="font-weight: bold; display: flex; align-items: center; color: var(--primary-color);">👍 <span id="modal-support-count" style="margin: 0 4px;">0</span> Supporters</span>
+            <button id="modal-support-btn" class="btn btn-primary" onclick="supportCurrentComplaint()">Support this issue</button>
         </div>
     </div>
 </div>
@@ -176,14 +182,18 @@ async function trackComplaint() {
         
         const c = await res.json();
         
-        let timelineHtml = '<div style="padding-left: 1rem; border-left: 2px solid #e2e8f0; margin-top: 1rem;">';
+        let timelineHtml = '<div style="margin-top: 1rem; margin-left: 0.5rem;">';
         if (c.history && c.history.length > 0) {
             c.history.forEach(h => {
+                let cssClass = 'timeline-event';
+                if (h.action.includes('INTERVENTION')) cssClass += ' intervention';
+                if (h.action.includes('TRANSFER')) cssClass += ' transfer';
+                const actorDisplay = h.actor_name ? `${h.actor_role.replace(/_/g, ' ')} &mdash; ${h.actor_name}` : h.actor_role.replace(/_/g, ' ');
                 timelineHtml += `
-                    <div style="margin-bottom: 1rem; position: relative;">
-                        <div style="position: absolute; left: -1.4rem; top: 0.2rem; width: 0.6rem; height: 0.6rem; background: var(--primary-color); border-radius: 50%;"></div>
-                        <div style="font-size: 0.8rem; color: #64748b;">${window.formatIST(h.timestamp)}</div>
-                        <div style="font-weight: bold;">${h.action.replace(/_/g, ' ')}</div>
+                    <div class="${cssClass}">
+                        <div class="timeline-time">${window.formatIST(h.timestamp)}</div>
+                        <div class="timeline-action">${h.action.replace(/_/g, ' ')}</div>
+                        <div class="timeline-actor">By: ${actorDisplay}</div>
                     </div>
                 `;
             });
@@ -196,7 +206,7 @@ async function trackComplaint() {
             <div class="card" style="padding: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius); background: #fff;">
                 <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
                     <span style="font-weight: bold; color: var(--primary-color)">${c.category}</span>
-                    <span style="background: #e2e8f0; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.85rem; font-weight: bold;">${
+                    <span class="badge badge-info">${
                         String(c.status || '').trim().toLowerCase() === 'completed' && String(c.assignment_state || '').trim().toLowerCase() === 'proof_submitted'
                         ? 'AWAITING VERIFICATION'
                         : (c.status || '').toUpperCase().replace(/_/g, ' ')
@@ -266,7 +276,14 @@ function renderComplaints() {
     });
     
     if (filtered.length === 0) {
-        listEl.innerHTML = '<p class="text-muted" style="padding: 2rem;">No complaints match the current filters in this tab.</p>';
+        listEl.innerHTML = `
+            <div class="empty-state" style="margin-top: 2rem;">
+                <div class="empty-state-icon">📄</div>
+                <h4>No matching complaints</h4>
+                <p>Try adjusting your filters or search terms.</p>
+                <button class="btn btn-secondary" onclick="clearFilters()">Clear Filters</button>
+            </div>
+        `;
         return;
     }
     
@@ -274,29 +291,66 @@ function renderComplaints() {
     filtered.forEach(c => {
         const date = window.formatIST(c.created_at);
         
+        const user = window.firebase ? firebase.auth().currentUser : null;
+        const uid = user ? user.uid : null;
+        const isSupported = c.supporters && c.supporters.includes(uid);
+        
+        let supportBtnHtml = `
+            <button id="btn-support-${c.id}" class="btn ${isSupported ? 'btn-supported' : 'btn-support'}" onclick="toggleSupportFromCard('${c.id}')" style="border-radius: 20px; transition: all 0.2s; padding: 0.4rem 0.8rem; font-size: 0.9rem; font-weight: bold; border: 1px solid ${isSupported ? '#10b981' : 'var(--primary-color)'}; background: ${isSupported ? '#10b981' : 'transparent'}; color: ${isSupported ? '#fff' : 'var(--primary-color)'}; display: flex; align-items: center; gap: 0.4rem;">
+                <span class="icon">👍</span> 
+                <span class="text">${isSupported ? 'Supported' : 'Support'}</span> 
+                <span class="count">${c.support_count}</span>
+            </button>
+        `;
+        
+        let rawStatus = String(c.status || '').trim().toLowerCase();
+        let statusText = rawStatus.toUpperCase().replace(/_/g, ' ');
+        let badgeClass = 'badge-neutral';
+        
+        if (rawStatus === 'completed' && String(c.assignment_state || '').trim().toLowerCase() === 'proof_submitted') {
+            statusText = 'AWAITING VERIFICATION';
+            badgeClass = 'badge-warning';
+        } else if (rawStatus === 'verified' || rawStatus === 'in_progress') {
+            badgeClass = 'badge-info';
+        } else if (rawStatus === 'closed') {
+            badgeClass = 'badge-success';
+        } else if (rawStatus === 'escalated' || rawStatus === 'false_report') {
+            badgeClass = 'badge-danger';
+        }
+
         html += `
-            <div class="card" style="padding: 1.5rem; border: 1px solid var(--border-color); border-radius: var(--radius); background: #fff; display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+            <div class="card" style="padding: 1.5rem; display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 1.5rem;">
                 <div style="flex: 1 1 250px; min-width: 0;">
-                    <div style="display: flex; justify-content: flex-start; gap: 1rem; margin-bottom: 0.25rem;">
-                        <span style="font-size: 0.8rem; font-weight: bold; color: var(--text-muted);">${c.report_id || 'ID: ' + c.id.substring(0,8)}</span>
-                        <span style="font-weight: bold; color: var(--primary-color)">${c.category}</span>
-                    </div>
-                    <div style="display: flex; justify-content: flex-start; gap: 1rem; margin-bottom: 0.5rem; align-items: center; flex-wrap: wrap;">
-                        <h4 style="margin: 0; word-break: break-word;">${c.description || 'No description'}</h4>
-                        <span style="background: #e2e8f0; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.85rem; font-weight: bold; white-space: nowrap;">${
-                            String(c.status || '').trim().toLowerCase() === 'completed' && String(c.assignment_state || '').trim().toLowerCase() === 'proof_submitted'
-                            ? 'AWAITING VERIFICATION'
-                            : c.status.toUpperCase().replace('_', ' ')
-                        }</span>
-                    </div>
-                    <p class="text-muted" style="font-size: 0.9rem; margin-bottom: 0.5rem;">📍 ${(c.location_locality ? c.location_locality + ', ' : '')}${c.location_text || ''}</p>
                     
-                    <div style="margin-top: 1rem; border-top: 1px solid #f1f5f9; padding-top: 0.5rem;">
-                        <span style="font-size: 0.9rem; font-weight: bold; color: #d97706;">👍 ${c.support_count} Supporters</span>
+                    <div style="display: flex; justify-content: flex-start; align-items: center; gap: 1rem; margin-bottom: 0.5rem; flex-wrap: wrap;">
+                        <span style="font-family: monospace; font-size: 0.9rem; font-weight: 600; color: var(--text-muted);">${c.report_id || c.id.substring(0,8) + '...'}</span>
+                        <div class="badge ${badgeClass}">● ${statusText}</div>
+                    </div>
+                    
+                    <h4 style="margin: 0; word-break: break-word; font-size: 1.15rem; color: var(--text-main); margin-bottom: 0.75rem;">${c.description || 'No description'}</h4>
+                    
+                    <div style="display: flex; flex-direction: column; gap: 0.5rem; color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">
+                        <div style="display: flex; align-items: flex-start; gap: 0.5rem;">
+                            <span style="font-size: 1.1rem; line-height: 1.2;">📍</span> 
+                            <span style="flex: 1;">${(c.location_locality ? c.location_locality + ', ' : '')}${c.location_text || ''}</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <span style="font-size: 1.1rem;">🏢</span> ${c.category}
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <span style="font-size: 1.1rem;">🕒</span> ${date}
+                        </div>
+                    </div>
+                    
+                    <div style="border-top: 1px solid var(--border-light); padding-top: 1rem; display: flex; align-items: center; justify-content: flex-start;">
+                        ${supportBtnHtml}
                     </div>
                 </div>
-                <div class="card-actions" style="display: flex; align-items: center; justify-content: flex-end; flex: 0 0 auto;">
-                    <button class="btn btn-secondary btn-sm" onclick="openDetails('${c.id}')" style="white-space: nowrap;">View Details</button>
+                
+                <div class="card-actions" style="display: flex; align-items: center; justify-content: flex-end; flex: 0 0 auto; margin-top: auto;">
+                    <button class="btn btn-view-details" onclick="openDetails('${c.id}')">
+                        View Details <span class="arrow">&rarr;</span>
+                    </button>
                 </div>
             </div>
         `;
@@ -327,6 +381,18 @@ function openDetails(id) {
     document.getElementById('modal-location').innerText = fullLoc;
     document.getElementById('modal-date').innerText = window.formatIST(c.created_at);
     
+    if (c.expected_completion_deadline) {
+        const dl = window.formatDeadline(c.expected_completion_deadline);
+        if (dl) {
+            document.getElementById('modal-deadline').innerHTML = `<span style="background: ${dl.bg}; color: ${dl.color}; padding: 2px 6px; border-radius: 4px; font-weight: bold;">${dl.formatted} (${dl.status})</span>`;
+            document.getElementById('modal-deadline-container').style.display = 'block';
+        } else {
+            document.getElementById('modal-deadline-container').style.display = 'none';
+        }
+    } else {
+        document.getElementById('modal-deadline-container').style.display = 'none';
+    }
+    
     if (c.image_url) {
         document.getElementById('modal-image').src = c.image_url;
         document.getElementById('modal-image-container').style.display = 'block';
@@ -339,43 +405,153 @@ function openDetails(id) {
     const timelineEl = document.getElementById('modal-timeline');
     const timelineContentEl = document.getElementById('modal-timeline-content');
     if (c.history && c.history.length > 0) {
-        timelineContentEl.innerHTML = c.history.map(h => `
-            <div style="margin-bottom: 0.8rem; position: relative;">
-                <div style="position: absolute; left: -1.4rem; top: 0.2rem; width: 0.6rem; height: 0.6rem; background: var(--primary-color); border-radius: 50%;"></div>
-                <div style="font-size: 0.8rem; color: #64748b;">${window.formatIST(h.timestamp)}</div>
-                <div style="font-weight: bold; font-size: 0.9rem;">${h.action.replace('_', ' ')}</div>
-                <div style="font-size: 0.85rem;">By: ${h.actor_role.replace('_', ' ')}</div>
-                ${h.details ? `<div style="font-size: 0.85rem; color: #475569; margin-top: 2px;"><i>${h.details}</i></div>` : ''}
+        timelineContentEl.innerHTML = c.history.map(h => {
+            let cssClass = 'timeline-event';
+            if (h.action.includes('INTERVENTION')) cssClass += ' intervention';
+            if (h.action.includes('TRANSFER')) cssClass += ' transfer';
+            const actorDisplay = h.actor_name ? `${h.actor_role.replace(/_/g, ' ')} &mdash; ${h.actor_name}` : h.actor_role.replace(/_/g, ' ');
+            return `
+            <div class="${cssClass}">
+                <div class="timeline-time">${window.formatIST(h.timestamp)}</div>
+                <div class="timeline-action">${h.action.replace(/_/g, ' ')}</div>
+                <div class="timeline-actor">By: ${actorDisplay}</div>
+                ${h.details ? `<div class="timeline-details">${h.details}</div>` : ''}
             </div>
-        `).join('');
+            `;
+        }).join('');
         timelineEl.style.display = 'block';
     } else {
         timelineEl.style.display = 'none';
     }
     
     const btn = document.getElementById('modal-support-btn');
-    const user = firebase.auth().currentUser;
+    const user = window.firebase ? firebase.auth().currentUser : null;
     
     if (user && c.supporters && c.supporters.includes(user.uid)) {
         btn.innerText = 'Supported ✓';
         btn.style.background = '#10b981';
         btn.style.borderColor = '#10b981';
+        btn.style.color = '#fff';
     } else {
         btn.innerText = 'Support';
         btn.style.background = 'var(--primary-color)';
         btn.style.borderColor = 'var(--primary-color)';
+        btn.style.color = '#fff';
     }
     
     document.getElementById('details-modal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
 }
 
 function closeDetails() {
     document.getElementById('details-modal').style.display = 'none';
+    document.body.style.overflow = '';
+}
+
+async function toggleSupportFromCard(complaintId) {
+    if (!window.firebase) return;
+    const user = firebase.auth().currentUser;
+    if (!user) {
+        if (window.SnapFixToast) window.SnapFixToast.show("Please log in to support complaints.", "warning");
+        setTimeout(() => { window.location.href = '/login?next=/public'; }, 1500);
+        return;
+    }
+
+    const c = allComplaints.find(x => x.id === complaintId);
+    if (!c) return;
+
+    const btn = document.getElementById(`btn-support-${complaintId}`);
+    if (!btn) return;
+    
+    // Prevent double-clicks
+    if (btn.disabled) return;
+    btn.disabled = true;
+
+    // Optimistic UI Update
+    const isCurrentlySupported = c.supporters && c.supporters.includes(user.uid);
+    const originalCount = c.support_count || 0;
+    const newCount = isCurrentlySupported ? Math.max(0, originalCount - 1) : originalCount + 1;
+    
+    // Animate button
+    btn.style.transform = 'scale(0.95)';
+    setTimeout(() => btn.style.transform = 'scale(1)', 150);
+
+    // Set optimistic state
+    const textSpan = btn.querySelector('.text');
+    const countSpan = btn.querySelector('.count');
+    
+    if (isCurrentlySupported) {
+        // Optimistically remove support
+        btn.style.background = 'transparent';
+        btn.style.borderColor = 'var(--primary-color)';
+        btn.style.color = 'var(--primary-color)';
+        textSpan.innerText = 'Support';
+        countSpan.innerText = newCount;
+    } else {
+        // Optimistically add support
+        btn.style.background = '#10b981';
+        btn.style.borderColor = '#10b981';
+        btn.style.color = '#fff';
+        textSpan.innerText = 'Supported';
+        countSpan.innerText = newCount;
+    }
+
+    try {
+        const token = await user.getIdToken();
+        const res = await fetch(`/api/complaints/${complaintId}/support`, {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        
+        const data = await res.json();
+        
+        if (!res.ok) {
+            throw new Error(data.error || "Failed to toggle support");
+        }
+        
+        // Update local state with actual backend response
+        if (data.complaint) {
+            c.support_count = data.complaint.support_count;
+            c.supporters = data.complaint.supporters || [];
+            
+            const isNowSupported = c.supporters.includes(user.uid);
+            countSpan.innerText = c.support_count;
+            if (isNowSupported) {
+                btn.style.background = '#10b981';
+                btn.style.borderColor = '#10b981';
+                btn.style.color = '#fff';
+                textSpan.innerText = 'Supported';
+            } else {
+                btn.style.background = 'transparent';
+                btn.style.borderColor = 'var(--primary-color)';
+                btn.style.color = 'var(--primary-color)';
+                textSpan.innerText = 'Support';
+            }
+        }
+    } catch(err) {
+        if (window.SnapFixToast) window.SnapFixToast.show(err.message, "error");
+        
+        // Revert optimistic UI
+        countSpan.innerText = originalCount;
+        if (isCurrentlySupported) {
+            btn.style.background = '#10b981';
+            btn.style.borderColor = '#10b981';
+            btn.style.color = '#fff';
+            textSpan.innerText = 'Supported';
+        } else {
+            btn.style.background = 'transparent';
+            btn.style.borderColor = 'var(--primary-color)';
+            btn.style.color = 'var(--primary-color)';
+            textSpan.innerText = 'Support';
+        }
+    } finally {
+        btn.disabled = false;
+    }
 }
 
 async function supportCurrentComplaint() {
     if (!currentComplaintId) return;
-    const user = firebase.auth().currentUser;
+    const user = window.firebase ? firebase.auth().currentUser : null;
     if (!user) {
         if (window.SnapFixToast) window.SnapFixToast.show("Please log in to support complaints.", "warning");
         setTimeout(() => { window.location.href = '/login?next=/public'; }, 1500);
@@ -384,7 +560,10 @@ async function supportCurrentComplaint() {
     
     const btn = document.getElementById('modal-support-btn');
     btn.disabled = true;
-    btn.innerText = 'Supporting...';
+    
+    // Animate button
+    btn.style.transform = 'scale(0.95)';
+    setTimeout(() => btn.style.transform = 'scale(1)', 150);
     
     try {
         const token = await user.getIdToken();
@@ -411,10 +590,12 @@ async function supportCurrentComplaint() {
                 btn.innerText = 'Supported ✓';
                 btn.style.background = '#10b981';
                 btn.style.borderColor = '#10b981';
+                btn.style.color = '#fff';
             } else {
                 btn.innerText = 'Support';
                 btn.style.background = 'var(--primary-color)';
                 btn.style.borderColor = 'var(--primary-color)';
+                btn.style.color = '#fff';
             }
             
             renderComplaints();

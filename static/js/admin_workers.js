@@ -147,7 +147,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (filtered.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="6" style="padding: 2rem; text-align: center; color: var(--text-muted);">No workers found.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="6" style="padding: 4rem 1rem; text-align: center;"><div style="font-size: 3rem; opacity: 0.5; margin-bottom: 1rem;">👷‍♂️</div><h4 style="margin-bottom: 0.5rem; color: var(--text-main);">No workers found</h4><p class="text-muted">Adjust your filters to see more results.</p></td></tr>`;
             return;
         }
 

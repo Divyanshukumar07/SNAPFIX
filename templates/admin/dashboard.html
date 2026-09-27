@@ -8,18 +8,24 @@
     <p>Manage and verify citizen complaints.</p>
 </div>
 
-<div id="admin-stats-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
-    <div class="card" style="padding: 1.5rem; text-align: center; background: #eff6ff; border: 1px solid #bfdbfe;">
-        <h3 style="margin-bottom: 0.5rem; color: #1e3a8a;">Total Complaints</h3>
-        <p id="stat-total" style="font-size: 2rem; font-weight: bold; color: #2563eb;">-</p>
+<div id="admin-stats-container" class="stats-grid">
+    <div class="stat-card stat-accent-blue">
+        <div class="stat-card-icon">📋</div>
+        <p>Total Complaints</p>
+        <h3 id="stat-total">-</h3>
+        <div class="stat-card-support">All recorded civic issues</div>
     </div>
-    <div class="card" style="padding: 1.5rem; text-align: center; background: #fffbeb; border: 1px solid #fde68a;">
-        <h3 style="margin-bottom: 0.5rem; color: #78350f;">Pending Verification</h3>
-        <p id="stat-pending" style="font-size: 2rem; font-weight: bold; color: #d97706;">-</p>
+    <div class="stat-card stat-accent-amber">
+        <div class="stat-card-icon">⏳</div>
+        <p>Pending Verification</p>
+        <h3 id="stat-pending">-</h3>
+        <div class="stat-card-support">Action required</div>
     </div>
-    <div class="card" style="padding: 1.5rem; text-align: center; background: #ecfdf5; border: 1px solid #a7f3d0;">
-        <h3 style="margin-bottom: 0.5rem; color: #064e3b;">Resolved</h3>
-        <p id="stat-resolved" style="font-size: 2rem; font-weight: bold; color: #059669;">-</p>
+    <div class="stat-card stat-accent-green">
+        <div class="stat-card-icon">✓</div>
+        <p>Resolved</p>
+        <h3 id="stat-resolved">-</h3>
+        <div class="stat-card-support">Successfully closed</div>
     </div>
 </div>
 

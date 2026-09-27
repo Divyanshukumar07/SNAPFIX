@@ -202,16 +202,4 @@ SnapFix is designed to be deployed into production using:
 
 ## 🧪 Testing
 
-The repository includes a suite of test scripts verifying essential logic blocks. 
-
-Currently implemented test suites include:
-- `test_authority_sync.py`
-- `test_authz.py`
-- `test_dashboard_roles.py`
-- `test_workflow.py`
-
-To execute the test suite locally, ensure your virtual environment is active and run:
-
-```bash
-pytest
-```
+The repository currently does not contain automated unit tests. Manual testing should be performed to verify core logic blocks.

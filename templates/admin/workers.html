@@ -39,22 +39,22 @@
 
 <div id="workers-error" class="alert alert-error" style="display: none; margin-bottom: 1rem;"></div>
 
-<div style="overflow-x: auto;">
-    <table style="width: 100%; border-collapse: collapse; min-width: 800px; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-radius: var(--radius); overflow: hidden;">
+<div class="card" style="padding: 0; overflow-x: auto; margin-bottom: 2rem;">
+    <table style="width: 100%; border-collapse: collapse; min-width: 800px; text-align: left;">
         <thead>
-            <tr style="background: var(--bg-light); border-bottom: 2px solid var(--border-color); text-align: left;">
-                <th style="padding: 1rem;">Worker</th>
-                <th style="padding: 1rem;">Department</th>
-                <th style="padding: 1rem;">Status</th>
-                <th style="padding: 1rem;">Active Tasks</th>
-                <th style="padding: 1rem;">Performance</th>
-                <th style="padding: 1rem;">Actions</th>
+            <tr style="background: var(--bg-main); border-bottom: 1px solid var(--border-color);">
+                <th style="padding: 1rem 1.5rem; font-size: 0.85rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Worker</th>
+                <th style="padding: 1rem 1.5rem; font-size: 0.85rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Department</th>
+                <th style="padding: 1rem 1.5rem; font-size: 0.85rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Status</th>
+                <th style="padding: 1rem 1.5rem; font-size: 0.85rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Active Tasks</th>
+                <th style="padding: 1rem 1.5rem; font-size: 0.85rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Performance</th>
+                <th style="padding: 1rem 1.5rem; font-size: 0.85rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600;">Actions</th>
             </tr>
         </thead>
         <tbody id="workers-tbody">
             <tr>
                 <td colspan="6" style="padding: 2rem; text-align: center; color: var(--text-muted);">
-                    Loading workers...
+                    <div class="skeleton" style="height: 40px; width: 100%;"></div>
                 </td>
             </tr>
         </tbody>
