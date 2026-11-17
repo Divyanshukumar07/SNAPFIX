@@ -253,6 +253,63 @@
         to { opacity: 1; }
     }
 
+    /* Subtle Tactile Button (Adapted from Uiverse MetalButton) */
+    .btn-tactile {
+        position: relative;
+        overflow: hidden;
+        z-index: 1;
+        background: var(--primary-color);
+        border: none;
+        box-shadow: 
+            0 4px 6px rgba(0, 0, 0, 0.1), 
+            inset 0 1px 0 rgba(255, 255, 255, 0.25);
+        transition: transform 0.2s cubic-bezier(0.25, 1, 0.5, 1), box-shadow 0.2s cubic-bezier(0.25, 1, 0.5, 1);
+    }
+    
+    .btn-tactile::before {
+        content: "";
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        z-index: -1;
+        background: radial-gradient(circle 100px at 50% -20%, rgba(255, 255, 255, 0.35), transparent);
+        opacity: 0.8;
+        transition: opacity 0.3s ease;
+    }
+    
+    .btn-tactile::after {
+        content: "";
+        position: absolute;
+        top: 100%; left: 0%;
+        width: 100%; height: 100%;
+        background: radial-gradient(circle 80px at 50% 10%, rgba(255, 255, 255, 0.3), transparent);
+        z-index: -1;
+        opacity: 0;
+        transition: top 0.4s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.4s ease;
+    }
+    
+    .btn-tactile:hover {
+        transform: translateY(-2px);
+        box-shadow: 
+            0 8px 16px rgba(3, 105, 161, 0.25),
+            inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    }
+    
+    .btn-tactile:hover::before {
+        opacity: 1;
+    }
+    
+    .btn-tactile:hover::after {
+        top: 0%;
+        opacity: 1;
+    }
+    
+    .btn-tactile:active {
+        transform: translateY(1px) scale(0.98);
+        box-shadow: 
+            0 2px 4px rgba(0, 0, 0, 0.1),
+            inset 0 3px 8px rgba(0, 0, 0, 0.2);
+    }
+
     @keyframes float-mockup {
         0% { transform: rotateY(0deg) rotateZ(0deg) translateY(0px); }
         50% { transform: rotateY(1deg) rotateZ(0.5deg) translateY(-6px); }
@@ -306,7 +363,7 @@
         <p>SnapFix connects citizens with the right department, tracks every step, and puts accountability where it belongs.</p>
         
         <div class="hero-actions">
-            <a href="/complaints/new" class="btn btn-primary btn-large" style="border-radius: 30px;">Report an Issue</a>
+            <a href="/complaints/new" class="btn btn-primary btn-large btn-tactile" style="border-radius: 30px;">Report an Issue</a>
             <a href="/dashboard" class="btn btn-secondary btn-large" style="border-radius: 30px;">Track Complaint</a>
         </div>
     </div>
